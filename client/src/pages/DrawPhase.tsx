@@ -23,6 +23,19 @@ export default function DrawPhase() {
     ctx.fillRect(0, 0, canvas.width, canvas.height)
   }, [])
 
+  // Prevent page scroll/bounce while touching the canvas
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const prevent = (e: TouchEvent) => e.preventDefault()
+    canvas.addEventListener('touchmove', prevent, { passive: false })
+    canvas.addEventListener('touchstart', prevent, { passive: false })
+    return () => {
+      canvas.removeEventListener('touchmove', prevent)
+      canvas.removeEventListener('touchstart', prevent)
+    }
+  }, [])
+
   const getPos = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current!
     const rect = canvas.getBoundingClientRect()
@@ -95,20 +108,20 @@ export default function DrawPhase() {
   }
 
   return (
-    <section className="w-screen h-screen bg-paper-pattern bg-no-repeat bg-cover flex flex-col items-center justify-center p-4 gap-4">
+    <section className="w-screen h-[100dvh] bg-paper-pattern bg-no-repeat bg-cover flex flex-col items-center justify-center p-2 sm:p-4 gap-2 sm:gap-4 overflow-hidden">
       <Timer timerEnd={timerEnd} />
 
       <div className="text-center">
         <p className="text-ink-100 text-sm">Round {drawingRound} of {totalRounds} · Draw this:</p>
-        <h2 className="font-pacifico text-3xl text-ink-200">"{assignedPrompt}"</h2>
+        <h2 className="font-pacifico text-2xl sm:text-3xl text-ink-200">"{assignedPrompt}"</h2>
       </div>
 
-      <div className="card p-3">
+      <div className="card p-2 sm:p-3 flex-1 min-h-0 w-full max-w-[800px]">
         <canvas
           ref={canvasRef}
           width={800}
           height={400}
-          className="rounded-xl cursor-crosshair w-full max-w-[800px] touch-none"
+          className="rounded-xl cursor-crosshair w-full h-full touch-none select-none"
           style={{ aspectRatio: '2/1' }}
           onMouseDown={startDraw}
           onMouseMove={draw}
@@ -120,13 +133,14 @@ export default function DrawPhase() {
         />
       </div>
 
-      <div className="flex flex-wrap items-center justify-center gap-3">
-        <div className="flex gap-1">
+      {/* Toolbar — bigger touch targets on mobile */}
+      <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 w-full max-w-[800px]">
+        <div className="flex gap-1.5 sm:gap-1">
           {COLORS.map(c => (
             <button
               key={c}
-              className={`w-8 h-8 rounded-full border-2 transition-transform ${
-                color === c ? 'scale-125 border-ink-200' : 'border-paper-300 hover:scale-110'
+              className={`w-9 h-9 sm:w-8 sm:h-8 rounded-full border-2 transition-transform touch-manipulation ${
+                color === c ? 'scale-125 border-ink-200' : 'border-paper-300'
               }`}
               style={{ backgroundColor: c }}
               onClick={() => setColor(c)}
@@ -134,24 +148,24 @@ export default function DrawPhase() {
           ))}
         </div>
 
-        <div className="flex gap-1 items-center">
+        <div className="flex gap-1.5 sm:gap-1 items-center">
           {SIZES.map(s => (
             <button
               key={s}
-              className={`rounded-full bg-ink-200 transition-transform ${
-                brushSize === s ? 'ring-2 ring-blue-400 scale-110' : 'hover:scale-110'
+              className={`rounded-full bg-ink-200 transition-transform touch-manipulation ${
+                brushSize === s ? 'ring-2 ring-blue-400 scale-110' : ''
               }`}
-              style={{ width: s + 12, height: s + 12 }}
+              style={{ width: Math.max(s + 16, 28), height: Math.max(s + 16, 28) }}
               onClick={() => setBrushSize(s)}
             />
           ))}
         </div>
 
-        <button className="btn text-sm bg-red-100 text-red-600 hover:bg-red-200" onClick={clearCanvas}>
+        <button className="btn text-sm bg-red-100 text-red-600 active:bg-red-200 px-4 py-2" onClick={clearCanvas}>
           🗑️ Clear
         </button>
 
-        <button className="btn-green text-sm" onClick={handleSubmit}>
+        <button className="btn-green text-sm px-4 py-2" onClick={handleSubmit}>
           ✅ Done
         </button>
       </div>

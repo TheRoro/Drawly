@@ -5,13 +5,21 @@
 @layer base {
   body {
     @apply font-hand text-ink-200 bg-paper-100;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+
+  /* Prevent pull-to-refresh and overscroll bounce on mobile */
+  html, body {
+    overscroll-behavior: none;
   }
 }
 
 @layer components {
   .btn {
     @apply px-6 py-3 rounded-xl font-bold text-xl shadow-md transition-all duration-200
-           hover:scale-105 hover:shadow-lg active:scale-95 cursor-pointer;
+           hover:scale-105 hover:shadow-lg active:scale-95 cursor-pointer
+           select-none touch-manipulation;
   }
   .btn-blue {
     @apply btn bg-blue-400 hover:bg-blue-500 text-white;
@@ -26,6 +34,7 @@
     @apply bg-paper-300 shadow-inner border-none rounded-xl w-full py-3 px-4
            text-lg text-ink-200 placeholder-ink-100 focus:outline-none focus:ring-2
            focus:ring-blue-300 transition-all;
+    font-size: 16px; /* Prevents iOS zoom on focus */
   }
   .card {
     @apply bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-paper-300;

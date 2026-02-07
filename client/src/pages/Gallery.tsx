@@ -39,18 +39,18 @@ export default function Gallery() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 max-w-6xl mx-auto">
         {drawings.map((drawing, i) => (
           <div
             key={i}
-            className={`card transition-all duration-200 animate-slide-up ${
+            className={`card transition-all duration-200 animate-slide-up touch-manipulation ${
               isOwnDrawing(i)
                 ? 'opacity-50 cursor-not-allowed ring-2 ring-gray-300'
                 : voted === i
-                ? 'ring-4 ring-emerald-400 scale-105 cursor-default'
+                ? 'ring-4 ring-emerald-400 scale-[1.02] sm:scale-105 cursor-default'
                 : voted !== null
                 ? 'opacity-60 cursor-default'
-                : 'cursor-pointer hover:scale-105 hover:shadow-xl'
+                : 'cursor-pointer active:scale-95 sm:hover:scale-105 sm:hover:shadow-xl'
             }`}
             style={{ animationDelay: `${i * 100}ms` }}
             onClick={() => voted === null && !isOwnDrawing(i) && handleVote(i)}
