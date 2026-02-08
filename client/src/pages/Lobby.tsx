@@ -1,5 +1,6 @@
 import { useGame } from '../context/GameContext'
 import { socket } from '../socket'
+import Chat from '../components/Chat'
 
 export default function Lobby() {
   const { room, startGame, error } = useGame()
@@ -66,6 +67,8 @@ export default function Lobby() {
           </p>
         )}
       </div>
+
+      <Chat />
     </section>
   )
 }

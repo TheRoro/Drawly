@@ -94,6 +94,23 @@ io.on('connection', (socket) => {
     }, PROMPT_TIME * 1000)
   })
 
+  socket.on('chat-message', ({ message }: { message: string }) => {
+    const room = getRoomByPlayerId(socket.id)
+    if (!room) return
+    const player = room.players.get(socket.id)
+    if (!player) return
+    const text = message.trim().slice(0, 200)
+    if (!text) return
+    io.to(room.code).emit('chat-message', {
+      id: `${socket.id}-${Date.now()}`,
+      playerId: socket.id,
+      nickname: player.nickname,
+      color: player.color,
+      message: text,
+      timestamp: Date.now(),
+    })
+  })
+
   socket.on('submit-prompt', ({ prompt }: { prompt: string }) => {
     const room = getRoomByPlayerId(socket.id)
     if (!room || room.phase !== 'prompts') return

@@ -45,6 +45,15 @@ export interface SpyDrawing {
   total: number
 }
 
+export interface ChatMessage {
+  id: string
+  playerId: string
+  nickname: string
+  color: string
+  message: string
+  timestamp: number
+}
+
 interface GameContextType {
   room: RoomState | null
   error: string | null
@@ -59,6 +68,8 @@ interface GameContextType {
   isPromptAuthor: boolean
   waitingMessage: string
   spyDrawings: SpyDrawing[]
+  chatMessages: ChatMessage[]
+  sendChatMessage: (message: string) => void
   createRoom: (nickname: string) => void
   joinRoom: (code: string, nickname: string) => void
   startGame: () => void
@@ -85,6 +96,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [isPromptAuthor, setIsPromptAuthor] = useState<boolean>(false)
   const [waitingMessage, setWaitingMessage] = useState<string>('')
   const [spyDrawings, setSpyDrawings] = useState<SpyDrawing[]>([])
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
 
   useEffect(() => {
     if (!socket.connected) {
@@ -167,6 +179,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setTimeout(() => setError(null), 3000)
     })
 
+    socket.on('chat-message', (msg: ChatMessage) => {
+      setChatMessages(prev => [...prev.slice(-99), msg])
+    })
+
     return () => {
       socket.off('room-created')
       socket.off('room-update')
@@ -178,6 +194,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       socket.off('round-results')
       socket.off('results')
       socket.off('error')
+      socket.off('chat-message')
     }
   }, [navigate])
 
@@ -209,6 +226,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
     socket.emit('play-again')
   }, [])
 
+  const sendChatMessage = useCallback((message: string) => {
+    socket.emit('chat-message', { message })
+  }, [])
+
   return (
     <GameContext.Provider value={{
       room,
@@ -224,6 +245,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       isPromptAuthor,
       waitingMessage,
       spyDrawings,
+      chatMessages,
+      sendChatMessage,
       createRoom,
       joinRoom,
       startGame,
