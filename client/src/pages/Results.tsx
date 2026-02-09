@@ -1,9 +1,11 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useGame } from '../context/GameContext'
 import { socket } from '../socket'
 import confetti from 'canvas-confetti'
 
 const MEDALS = ['🥇', '🥈', '🥉']
+const PODIUM_HEIGHTS = ['h-40', 'h-28', 'h-20']
+const PODIUM_COLORS = ['bg-yellow-400', 'bg-gray-300', 'bg-orange-300']
 
 function AnimatedScore({ target, delay = 0 }: { target: number; delay?: number }) {
   const [value, setValue] = useState(0)
@@ -49,8 +51,22 @@ export default function Results() {
     }
   }, [leaderboard])
 
-  // Find best drawing (most votes overall)
-  const bestDrawing = results.length > 0 ? results[0] : null
+  const podiumDrawings = results.slice(0, 3)
+  // Reorder for podium display: [2nd, 1st, 3rd]
+  const podiumOrder = podiumDrawings.length >= 3
+    ? [podiumDrawings[1], podiumDrawings[0], podiumDrawings[2]]
+    : podiumDrawings.length === 2
+    ? [podiumDrawings[1], podiumDrawings[0]]
+    : podiumDrawings
+
+  const downloadDrawing = useCallback((imageData: string, prompt: string) => {
+    const link = document.createElement('a')
+    link.href = imageData
+    link.download = `drawly-${prompt.replace(/[^a-z0-9]/gi, '-').slice(0, 30)}.png`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }, [])
 
   return (
     <section className="w-screen min-h-screen bg-paper-pattern bg-no-repeat bg-cover p-6">
@@ -85,37 +101,57 @@ export default function Results() {
         </div>
       </div>
 
-      {/* Best of the Game */}
-      {bestDrawing && (
-        <div className="max-w-sm mx-auto mb-10 animate-slide-up" style={{ animationDelay: '300ms' }}>
-          <h3 className="font-shadows text-3xl text-ink-200 text-center mb-4">⭐ Best of the Game</h3>
-          <div className="card text-center ring-4 ring-yellow-400 shadow-xl relative">
-            <div className="absolute -top-4 -right-4 bg-yellow-400 text-yellow-900 rounded-full w-12 h-12 flex items-center justify-center font-bold text-xl shadow-lg">
-              {bestDrawing.votes}
-            </div>
-            <p className="font-shadows text-xl text-ink-200">"{bestDrawing.prompt}"</p>
-            <img src={bestDrawing.imageData} alt={bestDrawing.prompt} className="w-full rounded-xl mt-3 border border-paper-300" />
-            <p className="mt-3 text-ink-200 font-bold text-lg">🎨 by {bestDrawing.playerNickname}</p>
-            <p className="text-ink-100 text-sm">{bestDrawing.votes} vote{bestDrawing.votes !== 1 ? 's' : ''}</p>
-          </div>
-        </div>
-      )}
+      {/* Podium */}
+      {podiumDrawings.length > 0 && (
+        <div className="max-w-3xl mx-auto mb-10 animate-slide-up" style={{ animationDelay: '300ms' }}>
+          <h3 className="font-shadows text-3xl text-ink-200 text-center mb-6">🎨 Top Drawings</h3>
 
-      {/* Other top drawings */}
-      {results.length > 1 && (
-        <div className="max-w-4xl mx-auto mb-10">
-          <h3 className="font-shadows text-2xl text-ink-200 text-center mb-6">Runner Ups</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {results.slice(1, 4).map((result, i) => (
-              <div key={i} className="card text-center animate-slide-up relative" style={{ animationDelay: `${(i + 2) * 150}ms` }}>
-                <div className="absolute -top-3 -right-3 bg-blue-500 text-white rounded-full w-10 h-10 flex items-center justify-center font-bold text-lg shadow-lg">
-                  {result.votes}
+          {/* Drawing cards in podium order */}
+          <div className={`grid gap-4 mb-4 ${podiumOrder.length === 1 ? 'grid-cols-1 max-w-xs mx-auto' : podiumOrder.length === 2 ? 'grid-cols-2 max-w-lg mx-auto' : 'grid-cols-3'}`}>
+            {podiumOrder.map((result, displayIdx) => {
+              const actualRank = podiumDrawings.indexOf(result)
+              return (
+                <div
+                  key={displayIdx}
+                  className={`card text-center relative ${actualRank === 0 ? 'ring-4 ring-yellow-400 shadow-xl' : ''} ${actualRank === 0 ? 'sm:-mt-4' : 'sm:mt-4'}`}
+                  style={{ animationDelay: `${(displayIdx + 1) * 200}ms` }}
+                >
+                  {/* Vote badge */}
+                  <div className={`absolute -top-3 -right-3 rounded-full w-10 h-10 flex items-center justify-center font-bold text-lg shadow-lg ${actualRank === 0 ? 'bg-yellow-400 text-yellow-900' : 'bg-blue-500 text-white'}`}>
+                    {result.votes}
+                  </div>
+
+                  <span className="text-3xl">{MEDALS[actualRank]}</span>
+                  <p className="font-shadows text-sm sm:text-base text-ink-100 mt-1 truncate">"{result.prompt}"</p>
+                  <img src={result.imageData} alt={result.prompt} className="w-full rounded-xl mt-2 border border-paper-300" />
+                  <p className="mt-2 text-ink-200 font-medium text-sm">by {result.playerNickname}</p>
+
+                  {/* Download button */}
+                  <button
+                    onClick={() => downloadDrawing(result.imageData, result.prompt)}
+                    className="mt-2 text-xs bg-paper-200 hover:bg-paper-300 text-ink-200 rounded-lg px-3 py-1.5 touch-manipulation transition-colors"
+                    title="Save drawing"
+                  >
+                    💾 Save
+                  </button>
                 </div>
-                <p className="font-shadows text-lg text-ink-100">"{result.prompt}"</p>
-                <img src={result.imageData} alt={result.prompt} className="w-full rounded-xl mt-3 border border-paper-300" />
-                <p className="mt-2 text-ink-200 font-medium">by {result.playerNickname}</p>
-              </div>
-            ))}
+              )
+            })}
+          </div>
+
+          {/* Podium bars */}
+          <div className={`flex items-end justify-center gap-1 ${podiumOrder.length < 3 ? 'max-w-sm mx-auto' : ''}`}>
+            {podiumOrder.map((result, displayIdx) => {
+              const actualRank = podiumDrawings.indexOf(result)
+              return (
+                <div key={displayIdx} className="flex-1 flex flex-col items-center">
+                  <p className="text-xs text-ink-100 mb-1 truncate max-w-full">{result.playerNickname}</p>
+                  <div className={`w-full ${PODIUM_HEIGHTS[actualRank]} ${PODIUM_COLORS[actualRank]} rounded-t-lg flex items-center justify-center shadow-inner`}>
+                    <span className="text-2xl font-bold">{actualRank + 1}</span>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
