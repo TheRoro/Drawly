@@ -111,6 +111,21 @@ io.on('connection', (socket) => {
     })
   })
 
+  socket.on('reaction', ({ emoji, drawingIndex }: { emoji: string; drawingIndex: number }) => {
+    const room = getRoomByPlayerId(socket.id)
+    if (!room) return
+    const player = room.players.get(socket.id)
+    if (!player) return
+    // Broadcast to everyone in room
+    io.to(room.code).emit('reaction', {
+      id: `${socket.id}-${Date.now()}`,
+      playerId: socket.id,
+      nickname: player.nickname,
+      emoji,
+      drawingIndex,
+    })
+  })
+
   socket.on('submit-prompt', ({ prompt }: { prompt: string }) => {
     const room = getRoomByPlayerId(socket.id)
     if (!room || room.phase !== 'prompts') return

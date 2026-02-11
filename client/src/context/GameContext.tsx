@@ -54,6 +54,14 @@ export interface ChatMessage {
   timestamp: number
 }
 
+export interface Reaction {
+  id: string
+  playerId: string
+  nickname: string
+  emoji: string
+  drawingIndex: number
+}
+
 interface GameContextType {
   room: RoomState | null
   error: string | null
@@ -69,7 +77,9 @@ interface GameContextType {
   waitingMessage: string
   spyDrawings: SpyDrawing[]
   chatMessages: ChatMessage[]
+  reactions: Reaction[]
   sendChatMessage: (message: string) => void
+  sendReaction: (emoji: string, drawingIndex: number) => void
   createRoom: (nickname: string) => void
   joinRoom: (code: string, nickname: string) => void
   startGame: () => void
@@ -97,6 +107,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [waitingMessage, setWaitingMessage] = useState<string>('')
   const [spyDrawings, setSpyDrawings] = useState<SpyDrawing[]>([])
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [reactions, setReactions] = useState<Reaction[]>([])
 
   useEffect(() => {
     if (!socket.connected) {
@@ -183,6 +194,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setChatMessages(prev => [...prev.slice(-99), msg])
     })
 
+    socket.on('reaction', (reaction: Reaction) => {
+      setReactions(prev => [...prev.slice(-49), reaction])
+    })
+
     return () => {
       socket.off('room-created')
       socket.off('room-update')
@@ -195,6 +210,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       socket.off('results')
       socket.off('error')
       socket.off('chat-message')
+      socket.off('reaction')
     }
   }, [navigate])
 
@@ -230,6 +246,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
     socket.emit('chat-message', { message })
   }, [])
 
+  const sendReaction = useCallback((emoji: string, drawingIndex: number) => {
+    socket.emit('reaction', { emoji, drawingIndex })
+  }, [])
+
   return (
     <GameContext.Provider value={{
       room,
@@ -246,7 +266,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
       waitingMessage,
       spyDrawings,
       chatMessages,
+      reactions,
       sendChatMessage,
+      sendReaction,
       createRoom,
       joinRoom,
       startGame,

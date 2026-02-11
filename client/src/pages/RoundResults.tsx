@@ -2,10 +2,19 @@ import { useState, useEffect } from 'react'
 import { useGame } from '../context/GameContext'
 
 const MEDALS = ['🥇', '🥈', '🥉']
+const REACTION_EMOJIS = ['😂', '🔥', '💀', '👏', '😍', '💩']
+
+interface FloatingEmoji {
+  id: string
+  emoji: string
+  drawingIndex: number
+  x: number
+}
 
 export default function RoundResults() {
-  const { roundResults, drawingRound, totalRounds } = useGame()
+  const { roundResults, drawingRound, totalRounds, reactions, sendReaction } = useGame()
   const [revealedVotes, setRevealedVotes] = useState(false)
+  const [floatingEmojis, setFloatingEmojis] = useState<FloatingEmoji[]>([])
 
   // Animate vote reveal after a short delay
   useEffect(() => {
@@ -13,6 +22,23 @@ export default function RoundResults() {
     const timer = setTimeout(() => setRevealedVotes(true), 800)
     return () => clearTimeout(timer)
   }, [roundResults])
+
+  // Convert incoming reactions to floating emojis
+  useEffect(() => {
+    if (reactions.length === 0) return
+    const latest = reactions[reactions.length - 1]
+    const floating: FloatingEmoji = {
+      id: latest.id,
+      emoji: latest.emoji,
+      drawingIndex: latest.drawingIndex,
+      x: 20 + Math.random() * 60,
+    }
+    setFloatingEmojis(prev => [...prev, floating])
+    // Remove after animation
+    setTimeout(() => {
+      setFloatingEmojis(prev => prev.filter(f => f.id !== floating.id))
+    }, 2000)
+  }, [reactions])
 
   if (!roundResults) {
     return (
@@ -56,24 +82,49 @@ export default function RoundResults() {
         </div>
       </div>
 
-      {/* Round drawings */}
+      {/* Round drawings with reactions */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
         {roundResults.drawings.map((result, i) => (
-          <div key={i} className="card text-center animate-slide-up relative" style={{ animationDelay: `${i * 100}ms` }}>
-            <div className={`absolute -top-3 -right-3 bg-blue-500 text-white rounded-full w-10 h-10 flex items-center justify-center font-bold text-lg shadow-lg transition-all duration-500 ${
+          <div key={i} className="card text-center animate-slide-up relative overflow-hidden" style={{ animationDelay: `${i * 100}ms` }}>
+            {/* Vote badge */}
+            <div className={`absolute -top-3 -right-3 bg-blue-500 text-white rounded-full w-10 h-10 flex items-center justify-center font-bold text-lg shadow-lg transition-all duration-500 z-10 ${
               revealedVotes ? 'scale-100 opacity-100' : 'scale-0 opacity-0'
             }`}>
               {result.votes}
             </div>
+
+            {/* Floating emoji animations */}
+            {floatingEmojis
+              .filter(f => f.drawingIndex === i)
+              .map(f => (
+                <span
+                  key={f.id}
+                  className="absolute text-2xl pointer-events-none animate-float-up z-20"
+                  style={{ left: `${f.x}%`, bottom: '10%' }}
+                >
+                  {f.emoji}
+                </span>
+              ))}
+
             {i < 3 && <span className="text-2xl">{MEDALS[i]}</span>}
             <p className="font-shadows text-lg text-ink-100 mt-1">"{result.prompt}"</p>
             <img src={result.imageData} alt={result.prompt} className="w-full rounded-xl mt-3 border border-paper-300" />
             <p className={`mt-2 text-ink-200 font-medium transition-opacity duration-500 ${revealedVotes ? 'opacity-100' : 'opacity-0'}`}>
               by {result.playerNickname}
             </p>
-            <p className={`text-ink-100 text-sm transition-opacity duration-500 ${revealedVotes ? 'opacity-100' : 'opacity-0'}`}>
-              {result.votes} vote{result.votes !== 1 ? 's' : ''}
-            </p>
+
+            {/* Reaction buttons */}
+            <div className="flex justify-center gap-1 mt-3">
+              {REACTION_EMOJIS.map(emoji => (
+                <button
+                  key={emoji}
+                  onClick={() => sendReaction(emoji, i)}
+                  className="text-xl hover:scale-125 active:scale-90 transition-transform touch-manipulation p-1"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
           </div>
         ))}
       </div>
