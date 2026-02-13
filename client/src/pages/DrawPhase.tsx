@@ -1,6 +1,8 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 import { useGame } from '../context/GameContext'
+import { socket } from '../socket'
 import Timer from '../components/Timer'
+import Chat from '../components/Chat'
 
 const COLORS = ['#1a1a1a', '#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#ffffff']
 const SIZES = [2, 4, 8, 14]
@@ -13,6 +15,7 @@ export default function DrawPhase() {
   const [brushSize, setBrushSize] = useState(4)
   const [submitted, setSubmitted] = useState(false)
   const lastPos = useRef<{ x: number; y: number } | null>(null)
+  const submittedRef = useRef(false)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -34,6 +37,33 @@ export default function DrawPhase() {
       canvas.removeEventListener('touchmove', prevent)
       canvas.removeEventListener('touchstart', prevent)
     }
+  }, [])
+
+  // Auto-submit when timer expires
+  useEffect(() => {
+    if (!timerEnd || submitted) return
+    const remaining = timerEnd - Date.now()
+    if (remaining <= 0) return
+    const timer = setTimeout(() => {
+      if (!submittedRef.current && canvasRef.current) {
+        const imageData = canvasRef.current.toDataURL('image/png')
+        submitDrawing(imageData)
+        submittedRef.current = true
+        setSubmitted(true)
+      }
+    }, remaining)
+    return () => clearTimeout(timer)
+  }, [timerEnd, submitted, submitDrawing])
+
+  // Respond to server snapshot requests (for spy mode)
+  useEffect(() => {
+    const handleSnapshotRequest = () => {
+      if (submittedRef.current || !canvasRef.current) return
+      const imageData = canvasRef.current.toDataURL('image/png')
+      socket.emit('snapshot', { imageData })
+    }
+    socket.on('request-snapshot', handleSnapshotRequest)
+    return () => { socket.off('request-snapshot', handleSnapshotRequest) }
   }, [])
 
   const getPos = useCallback((e: React.MouseEvent | React.TouchEvent) => {
@@ -89,9 +119,11 @@ export default function DrawPhase() {
   }
 
   const handleSubmit = () => {
+    if (submittedRef.current) return
     const canvas = canvasRef.current!
     const imageData = canvas.toDataURL('image/png')
     submitDrawing(imageData)
+    submittedRef.current = true
     setSubmitted(true)
   }
 
@@ -103,6 +135,7 @@ export default function DrawPhase() {
           <p className="text-xl font-medium text-ink-200">Drawing submitted!</p>
           <p className="text-ink-100 mt-2">Waiting for other artists...</p>
         </div>
+        <Chat />
       </section>
     )
   }

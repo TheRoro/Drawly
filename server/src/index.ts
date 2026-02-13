@@ -111,7 +111,7 @@ io.on('connection', (socket) => {
     })
   })
 
-  socket.on('reaction', ({ emoji, drawingIndex }: { emoji: string; drawingIndex: number }) => {
+  socket.on('reaction', ({ emoji }: { emoji: string }) => {
     const room = getRoomByPlayerId(socket.id)
     if (!room) return
     const player = room.players.get(socket.id)
@@ -122,7 +122,6 @@ io.on('connection', (socket) => {
       playerId: socket.id,
       nickname: player.nickname,
       emoji,
-      drawingIndex,
     })
   })
 
@@ -135,6 +134,19 @@ io.on('connection', (socket) => {
       if (room.roundTimer) clearTimeout(room.roundTimer)
       startDrawingRound(room)
     }
+  })
+
+  socket.on('snapshot', ({ imageData }: { imageData: string }) => {
+    const room = getRoomByPlayerId(socket.id)
+    if (!room || room.phase !== 'drawing') return
+    if (socket.id === room.currentPromptAuthorId) return
+    const player = room.players.get(socket.id)
+    // Forward snapshot to prompt author
+    io.to(room.currentPromptAuthorId).emit('spy-snapshot', {
+      playerId: socket.id,
+      playerNickname: player?.nickname || 'Anonymous',
+      imageData,
+    })
   })
 
   socket.on('submit-drawing', ({ imageData }: { imageData: string }) => {
@@ -290,12 +302,32 @@ function startDrawingRound(room: ReturnType<typeof getRoom>) {
   room.roundTimer = setTimeout(() => {
     advanceToVoting(room)
   }, DRAW_TIME * 1000)
+
+  // Request periodic snapshots for spy mode (every 5 seconds)
+  const snapshotInterval = setInterval(() => {
+    if (room.phase !== 'drawing') {
+      clearInterval(snapshotInterval)
+      return
+    }
+    for (const playerId of drawers) {
+      io.to(playerId).emit('request-snapshot')
+    }
+  }, 5000)
+
+  // Store interval to clear later
+  ;(room as any)._snapshotInterval = snapshotInterval
 }
 
 function advanceToVoting(room: ReturnType<typeof getRoom>) {
   if (!room) return
   room.phase = 'voting'
   room.timerEnd = Date.now() + VOTE_TIME * 1000
+
+  // Clear snapshot interval
+  if ((room as any)._snapshotInterval) {
+    clearInterval((room as any)._snapshotInterval)
+    ;(room as any)._snapshotInterval = null
+  }
 
   const { prompt } = getCurrentPrompt(room)
 

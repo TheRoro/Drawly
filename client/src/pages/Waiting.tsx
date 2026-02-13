@@ -1,5 +1,6 @@
 import { useGame } from '../context/GameContext'
 import Timer from '../components/Timer'
+import Chat from '../components/Chat'
 
 export default function Waiting() {
   const { waitingMessage, timerEnd, drawingRound, totalRounds, spyDrawings } = useGame()
@@ -31,9 +32,9 @@ export default function Waiting() {
                 </p>
                 <img
                   src={spy.imageData}
-                  alt="Blurred drawing"
+                  alt="Drawing in progress"
                   className="w-full rounded-xl border border-paper-300"
-                  style={{ filter: 'blur(12px)' }}
+                  style={{ filter: 'blur(4px)' }}
                 />
               </div>
             ))}
@@ -44,6 +45,8 @@ export default function Waiting() {
       {spyDrawings.length === 0 && (
         <p className="text-ink-100 animate-pulse">Waiting for drawings to come in...</p>
       )}
+
+      <Chat />
     </section>
   )
 }

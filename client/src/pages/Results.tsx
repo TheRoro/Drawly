@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useGame } from '../context/GameContext'
 import { socket } from '../socket'
 import confetti from 'canvas-confetti'
+import Reactions from '../components/Reactions'
 
 const MEDALS = ['🥇', '🥈', '🥉']
 const PODIUM_HEIGHTS = ['h-40', 'h-28', 'h-20']
@@ -69,7 +70,7 @@ export default function Results() {
   }, [])
 
   return (
-    <section className="w-screen min-h-screen bg-paper-pattern bg-no-repeat bg-cover p-6">
+    <section className="w-screen min-h-screen bg-paper-pattern bg-no-repeat bg-cover p-6 pb-20">
       <h2 className="font-pacifico text-5xl text-ink-200 text-center mb-8 animate-bounce-in">
         🏆 Results
       </h2>
@@ -166,6 +167,8 @@ export default function Results() {
           <p className="text-ink-100 text-lg">Waiting for host to start next round...</p>
         )}
       </div>
+
+      <Reactions />
     </section>
   )
 }

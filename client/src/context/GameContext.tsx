@@ -59,7 +59,6 @@ export interface Reaction {
   playerId: string
   nickname: string
   emoji: string
-  drawingIndex: number
 }
 
 interface GameContextType {
@@ -79,7 +78,7 @@ interface GameContextType {
   chatMessages: ChatMessage[]
   reactions: Reaction[]
   sendChatMessage: (message: string) => void
-  sendReaction: (emoji: string, drawingIndex: number) => void
+  sendReaction: (emoji: string) => void
   createRoom: (nickname: string) => void
   joinRoom: (code: string, nickname: string) => void
   startGame: () => void
@@ -151,7 +150,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           navigate('/gallery')
           break
         case 'results':
-          navigate('/results')
+          // Navigation happens in 'results' event handler when data arrives
           break
       }
     })
@@ -163,6 +162,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     socket.on('spy-drawing', (data: SpyDrawing) => {
       setSpyDrawings(prev => [...prev, data])
+    })
+
+    socket.on('spy-snapshot', ({ playerId, playerNickname, imageData }: { playerId: string; playerNickname: string; imageData: string }) => {
+      setSpyDrawings(prev => {
+        const existing = prev.findIndex(s => (s as any).playerId === playerId)
+        const entry = { playerId, playerNickname, imageData, count: 0, total: 0 } as any
+        if (existing >= 0) {
+          const updated = [...prev]
+          updated[existing] = entry
+          return updated
+        }
+        return [...prev, entry]
+      })
     })
 
     socket.on('assign-prompt', ({ prompt }: { prompt: string }) => {
@@ -183,6 +195,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     socket.on('results', ({ drawings: d, leaderboard: l }: { drawings: ResultEntry[]; leaderboard: LeaderboardEntry[] }) => {
       setResults(d)
       setLeaderboard(l)
+      navigate('/results')
     })
 
     socket.on('error', ({ message }: { message: string }) => {
@@ -205,6 +218,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       socket.off('assign-prompt')
       socket.off('waiting-round')
       socket.off('spy-drawing')
+      socket.off('spy-snapshot')
       socket.off('drawings')
       socket.off('round-results')
       socket.off('results')
@@ -246,8 +260,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     socket.emit('chat-message', { message })
   }, [])
 
-  const sendReaction = useCallback((emoji: string, drawingIndex: number) => {
-    socket.emit('reaction', { emoji, drawingIndex })
+  const sendReaction = useCallback((emoji: string) => {
+    socket.emit('reaction', { emoji })
   }, [])
 
   return (
