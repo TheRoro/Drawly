@@ -1,70 +1,56 @@
-# Getting Started with Create React App
+# 🎨 Drawly
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A multiplayer drawing game inspired by Gartic Phone and Drawful. Draw, guess, and vote with friends!
 
-## Available Scripts
+## Game Flow
 
-In the project directory, you can run:
+1. **Create/Join Room** — Share a 5-letter room code with friends
+2. **Submit Prompts** — Everyone writes what others should draw (30s)
+3. **Draw!** — You get someone else's prompt and draw it (60s)
+4. **Vote** — View all drawings and vote for your favorite
+5. **Results** — See the leaderboard and top drawings
 
-### `npm start`
+## Tech Stack
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+- **Client**: React 19 + TypeScript + Vite + Tailwind CSS
+- **Server**: Node.js + Express + Socket.io
+- **Canvas**: Custom HTML5 Canvas with multi-color, multi-size brushes
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Development
 
-### `npm test`
+```bash
+# Install all dependencies
+cd server && npm install
+cd ../client && npm install
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+# Run both (from root)
+# Terminal 1: Server
+cd server && npm run dev
 
-### `npm run build`
+# Terminal 2: Client
+cd client && npm run dev
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+- Client runs on `http://localhost:3000`
+- Server runs on `http://localhost:3001`
+- Vite proxies WebSocket connections to the server
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## Deployment
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+- **Frontend**: Deploy `client/` to Vercel (build command: `npm run build`, output: `dist`)
+- **Server**: Deploy `server/` to Render as Web Service
+  - Build command: `npm install && npm run build`
+  - Start command: `npm start`
+  - Set `CLIENT_URL` env var to your Vercel domain
 
-### `npm run eject`
+## Features
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- ✅ Real-time multiplayer with Socket.io
+- ✅ Room creation with shareable codes
+- ✅ Timed drawing with countdown
+- ✅ Color picker + brush sizes
+- ✅ Anonymous voting
+- ✅ Leaderboard with points across rounds
+- ✅ Paper/sketchbook aesthetic
+- ✅ Mobile touch drawing support
+- ✅ Auto-cleanup on disconnect

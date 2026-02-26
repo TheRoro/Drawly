@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">
+  <rect width="400" height="400" fill="#F9EDD1"/>
+  <g opacity="0.08" stroke="#6B6B6B" stroke-width="0.5" fill="none">
+    <line x1="0" y1="30" x2="400" y2="30"/>
+    <line x1="0" y1="60" x2="400" y2="60"/>
+    <line x1="0" y1="90" x2="400" y2="90"/>
+    <line x1="0" y1="120" x2="400" y2="120"/>
+    <line x1="0" y1="150" x2="400" y2="150"/>
+    <line x1="0" y1="180" x2="400" y2="180"/>
+    <line x1="0" y1="210" x2="400" y2="210"/>
+    <line x1="0" y1="240" x2="400" y2="240"/>
+    <line x1="0" y1="270" x2="400" y2="270"/>
+    <line x1="0" y1="300" x2="400" y2="300"/>
+    <line x1="0" y1="330" x2="400" y2="330"/>
+    <line x1="0" y1="360" x2="400" y2="360"/>
+    <line x1="0" y1="390" x2="400" y2="390"/>
+  </g>
+  <g opacity="0.05" stroke="#cc4444" stroke-width="1" fill="none">
+    <line x1="50" y1="0" x2="50" y2="400"/>
+  </g>
+</svg>
