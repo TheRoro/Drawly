@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { socket } from '../socket'
 
@@ -35,7 +35,26 @@ export interface LeaderboardEntry {
   isHost: boolean
 }
 
-export function useGame() {
+interface GameContextType {
+  room: RoomState | null
+  error: string | null
+  assignedPrompt: string
+  timerEnd: number | null
+  drawings: DrawingEntry[]
+  results: ResultEntry[]
+  leaderboard: LeaderboardEntry[]
+  createRoom: (nickname: string) => void
+  joinRoom: (code: string, nickname: string) => void
+  startGame: () => void
+  submitPrompt: (prompt: string) => void
+  submitDrawing: (imageData: string) => void
+  submitVote: (drawingIndex: number) => void
+  playAgain: () => void
+}
+
+const GameContext = createContext<GameContextType | null>(null)
+
+export function GameProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const [room, setRoom] = useState<RoomState | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -50,12 +69,12 @@ export function useGame() {
       socket.connect()
     }
 
-    socket.on('room-update', (data: RoomState) => {
-      setRoom(data)
-    })
-
     socket.on('room-created', ({ code }: { code: string }) => {
       setRoom(prev => prev ? { ...prev, code } : { players: [], phase: 'lobby', code })
+    })
+
+    socket.on('room-update', (data: RoomState) => {
+      setRoom(data)
     })
 
     socket.on('game-phase', ({ phase, timerEnd: te }: { phase: string; timerEnd?: number }) => {
@@ -97,8 +116,8 @@ export function useGame() {
     })
 
     return () => {
-      socket.off('room-update')
       socket.off('room-created')
+      socket.off('room-update')
       socket.off('game-phase')
       socket.off('assign-prompt')
       socket.off('drawings')
@@ -135,21 +154,30 @@ export function useGame() {
     socket.emit('play-again')
   }, [])
 
-  return {
-    room,
-    error,
-    assignedPrompt,
-    timerEnd,
-    drawings,
-    results,
-    leaderboard,
-    createRoom,
-    joinRoom,
-    startGame,
-    submitPrompt,
-    submitDrawing,
-    submitVote,
-    playAgain,
-    socketId: socket.id,
-  }
+  return (
+    <GameContext.Provider value={{
+      room,
+      error,
+      assignedPrompt,
+      timerEnd,
+      drawings,
+      results,
+      leaderboard,
+      createRoom,
+      joinRoom,
+      startGame,
+      submitPrompt,
+      submitDrawing,
+      submitVote,
+      playAgain,
+    }}>
+      {children}
+    </GameContext.Provider>
+  )
+}
+
+export function useGame() {
+  const context = useContext(GameContext)
+  if (!context) throw new Error('useGame must be used within GameProvider')
+  return context
 }

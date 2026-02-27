@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
-import { useGame } from '../hooks/useGame'
+import { useGame } from '../context/GameContext'
 import Timer from '../components/Timer'
 
 const COLORS = ['#1a1a1a', '#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#ffffff']

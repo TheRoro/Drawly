@@ -1,15 +1,23 @@
-import { useState, FormEvent } from 'react'
+import { useState, useEffect, FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useGame } from '../hooks/useGame'
+import { useGame } from '../context/GameContext'
 
 export default function JoinRoom() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const mode = searchParams.get('mode') || 'join'
-  const { createRoom, joinRoom, error } = useGame()
+  const { createRoom, joinRoom, error, room } = useGame()
 
   const [nickname, setNickname] = useState('')
   const [roomCode, setRoomCode] = useState('')
+  const [waiting, setWaiting] = useState(false)
+
+  // Navigate to lobby once the server confirms room
+  useEffect(() => {
+    if (waiting && room?.code) {
+      navigate('/lobby')
+    }
+  }, [waiting, room, navigate])
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -17,11 +25,11 @@ export default function JoinRoom() {
 
     if (mode === 'create') {
       createRoom(nickname.trim())
-      navigate('/lobby')
+      setWaiting(true)
     } else {
       if (!roomCode.trim()) return
       joinRoom(roomCode.trim().toUpperCase(), nickname.trim())
-      navigate('/lobby')
+      setWaiting(true)
     }
   }
 

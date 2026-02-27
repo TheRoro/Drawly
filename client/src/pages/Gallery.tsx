@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useGame } from '../hooks/useGame'
+import { useGame } from '../context/GameContext'
 import { socket } from '../socket'
 
 export default function Gallery() {

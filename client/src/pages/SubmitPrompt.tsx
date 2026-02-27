@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react'
-import { useGame } from '../hooks/useGame'
+import { useGame } from '../context/GameContext'
 import Timer from '../components/Timer'
 
 export default function SubmitPrompt() {
