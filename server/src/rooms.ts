@@ -26,10 +26,13 @@ export function createRoom(hostId: string, nickname: string): Room {
     phase: 'lobby',
     prompts: new Map(),
     drawings: [],
+    currentRoundDrawings: [],
     promptAssignments: new Map(),
     roundTimer: null,
     timerEnd: null,
-    round: 1,
+    drawingRound: 0,
+    totalRounds: 0,
+    playerOrder: [],
   }
   rooms.set(code, room)
   return room
@@ -85,28 +88,30 @@ export function removePlayer(playerId: string): Room | undefined {
   return room
 }
 
-export function assignPrompts(room: Room): void {
-  const playerIds = [...room.prompts.keys()]
-  const prompts = [...room.prompts.values()]
+export function assignPromptsForRound(room: Room): void {
+  const playerIds = room.playerOrder
+  const round = room.drawingRound // 1-based
 
-  // Shift prompts by 1 so no one draws their own
+  // Each round, shift by `round` positions so no one gets their own prompt
+  // and no one gets the same prompt twice
   room.promptAssignments.clear()
   for (let i = 0; i < playerIds.length; i++) {
-    const assignedPrompt = prompts[(i + 1) % prompts.length]
-    room.promptAssignments.set(playerIds[i], assignedPrompt)
+    const promptOwnerIndex = (i + round) % playerIds.length
+    const promptOwnerId = playerIds[promptOwnerIndex]
+    const prompt = room.prompts.get(promptOwnerId) || 'Mystery prompt'
+    room.promptAssignments.set(playerIds[i], prompt)
   }
 }
 
-export function calculateResults(room: Room): Drawing[] {
-  // Sort by votes (descending)
-  const sorted = [...room.drawings].sort((a, b) => b.votes.length - a.votes.length)
+export function calculateRoundResults(room: Room): Drawing[] {
+  // Sort current round drawings by votes
+  const sorted = [...room.currentRoundDrawings].sort((a, b) => b.votes.length - a.votes.length)
 
   // Award points
   sorted.forEach((drawing, index) => {
     const player = room.players.get(drawing.playerId)
     if (player) {
       const points = drawing.votes.length * 100
-      // Bonus for top 3
       if (index === 0) player.score += points + 300
       else if (index === 1) player.score += points + 200
       else if (index === 2) player.score += points + 100
@@ -117,17 +122,28 @@ export function calculateResults(room: Room): Drawing[] {
   return sorted
 }
 
-export function resetForNewRound(room: Room): void {
+export function hasMoreRounds(room: Room): boolean {
+  return room.drawingRound < room.totalRounds
+}
+
+export function resetForNewGame(room: Room): void {
   room.phase = 'prompts'
   room.prompts.clear()
   room.drawings = []
+  room.currentRoundDrawings = []
   room.promptAssignments.clear()
-  room.round++
+  room.drawingRound = 0
+  room.totalRounds = 0
+  room.playerOrder = []
   if (room.roundTimer) {
     clearTimeout(room.roundTimer)
     room.roundTimer = null
   }
   room.timerEnd = null
+  // Reset scores
+  for (const player of room.players.values()) {
+    player.score = 0
+  }
 }
 
 export function getSerializablePlayers(room: Room): Player[] {

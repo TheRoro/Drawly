@@ -9,6 +9,7 @@ import Lobby from './pages/Lobby'
 import SubmitPrompt from './pages/SubmitPrompt'
 import DrawPhase from './pages/DrawPhase'
 import Gallery from './pages/Gallery'
+import RoundResults from './pages/RoundResults'
 import Results from './pages/Results'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -22,6 +23,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="/prompt" element={<SubmitPrompt />} />
           <Route path="/draw" element={<DrawPhase />} />
           <Route path="/gallery" element={<Gallery />} />
+          <Route path="/round-results" element={<RoundResults />} />
           <Route path="/results" element={<Results />} />
         </Routes>
       </GameProvider>

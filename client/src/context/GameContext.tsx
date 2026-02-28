@@ -43,6 +43,9 @@ interface GameContextType {
   drawings: DrawingEntry[]
   results: ResultEntry[]
   leaderboard: LeaderboardEntry[]
+  drawingRound: number
+  totalRounds: number
+  roundResults: { drawings: ResultEntry[]; leaderboard: LeaderboardEntry[] } | null
   createRoom: (nickname: string) => void
   joinRoom: (code: string, nickname: string) => void
   startGame: () => void
@@ -63,6 +66,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [drawings, setDrawings] = useState<DrawingEntry[]>([])
   const [results, setResults] = useState<ResultEntry[]>([])
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
+  const [drawingRound, setDrawingRound] = useState<number>(0)
+  const [totalRounds, setTotalRounds] = useState<number>(0)
+  const [roundResults, setRoundResults] = useState<{ drawings: ResultEntry[]; leaderboard: LeaderboardEntry[] } | null>(null)
 
   useEffect(() => {
     if (!socket.connected) {
@@ -77,15 +83,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setRoom(data)
     })
 
-    socket.on('game-phase', ({ phase, timerEnd: te }: { phase: string; timerEnd?: number }) => {
+    socket.on('game-phase', ({ phase, timerEnd: te, drawingRound: dr, totalRounds: tr }: { phase: string; timerEnd?: number; drawingRound?: number; totalRounds?: number }) => {
       setRoom(prev => prev ? { ...prev, phase } : null)
       setTimerEnd(te || null)
+      if (dr !== undefined) setDrawingRound(dr)
+      if (tr !== undefined) setTotalRounds(tr)
 
       switch (phase) {
         case 'prompts':
+          setRoundResults(null)
           navigate('/prompt')
           break
         case 'drawing':
+          setRoundResults(null)
           navigate('/draw')
           break
         case 'voting':
@@ -105,6 +115,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setDrawings(d)
     })
 
+    socket.on('round-results', ({ drawings: d, leaderboard: l, drawingRound: dr, totalRounds: tr }: { drawings: ResultEntry[]; leaderboard: LeaderboardEntry[]; drawingRound: number; totalRounds: number }) => {
+      setRoundResults({ drawings: d, leaderboard: l })
+      setDrawingRound(dr)
+      setTotalRounds(tr)
+      navigate('/round-results')
+    })
+
     socket.on('results', ({ drawings: d, leaderboard: l }: { drawings: ResultEntry[]; leaderboard: LeaderboardEntry[] }) => {
       setResults(d)
       setLeaderboard(l)
@@ -121,6 +138,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       socket.off('game-phase')
       socket.off('assign-prompt')
       socket.off('drawings')
+      socket.off('round-results')
       socket.off('results')
       socket.off('error')
     }
@@ -163,6 +181,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
       drawings,
       results,
       leaderboard,
+      drawingRound,
+      totalRounds,
+      roundResults,
       createRoom,
       joinRoom,
       startGame,

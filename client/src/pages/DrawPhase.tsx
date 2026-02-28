@@ -6,7 +6,7 @@ const COLORS = ['#1a1a1a', '#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6'
 const SIZES = [2, 4, 8, 14]
 
 export default function DrawPhase() {
-  const { assignedPrompt, timerEnd, submitDrawing } = useGame()
+  const { assignedPrompt, timerEnd, submitDrawing, drawingRound, totalRounds } = useGame()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [color, setColor] = useState('#1a1a1a')
@@ -99,7 +99,7 @@ export default function DrawPhase() {
       <Timer timerEnd={timerEnd} />
 
       <div className="text-center">
-        <p className="text-ink-100 text-sm">Draw this:</p>
+        <p className="text-ink-100 text-sm">Round {drawingRound} of {totalRounds} · Draw this:</p>
         <h2 className="font-pacifico text-3xl text-ink-200">"{assignedPrompt}"</h2>
       </div>
 
