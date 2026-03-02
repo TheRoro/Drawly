@@ -8,6 +8,7 @@ import JoinRoom from './pages/JoinRoom'
 import Lobby from './pages/Lobby'
 import SubmitPrompt from './pages/SubmitPrompt'
 import DrawPhase from './pages/DrawPhase'
+import Waiting from './pages/Waiting'
 import Gallery from './pages/Gallery'
 import RoundResults from './pages/RoundResults'
 import Results from './pages/Results'
@@ -22,6 +23,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="/lobby" element={<Lobby />} />
           <Route path="/prompt" element={<SubmitPrompt />} />
           <Route path="/draw" element={<DrawPhase />} />
+          <Route path="/waiting" element={<Waiting />} />
           <Route path="/gallery" element={<Gallery />} />
           <Route path="/round-results" element={<RoundResults />} />
           <Route path="/results" element={<Results />} />

@@ -27,12 +27,12 @@ export function createRoom(hostId: string, nickname: string): Room {
     prompts: new Map(),
     drawings: [],
     currentRoundDrawings: [],
-    promptAssignments: new Map(),
     roundTimer: null,
     timerEnd: null,
-    drawingRound: 0,
+    currentRound: 0,
     totalRounds: 0,
     playerOrder: [],
+    currentPromptAuthorId: '',
   }
   rooms.set(code, room)
   return room
@@ -88,26 +88,21 @@ export function removePlayer(playerId: string): Room | undefined {
   return room
 }
 
-export function assignPromptsForRound(room: Room): void {
-  const playerIds = room.playerOrder
-  const round = room.drawingRound // 1-based
+export function getCurrentPrompt(room: Room): { prompt: string; authorId: string } {
+  const authorId = room.playerOrder[room.currentRound]
+  const prompt = room.prompts.get(authorId) || 'Mystery prompt'
+  return { prompt, authorId }
+}
 
-  // Each round, shift by `round` positions so no one gets their own prompt
-  // and no one gets the same prompt twice
-  room.promptAssignments.clear()
-  for (let i = 0; i < playerIds.length; i++) {
-    const promptOwnerIndex = (i + round) % playerIds.length
-    const promptOwnerId = playerIds[promptOwnerIndex]
-    const prompt = room.prompts.get(promptOwnerId) || 'Mystery prompt'
-    room.promptAssignments.set(playerIds[i], prompt)
-  }
+export function getDrawersForRound(room: Room): string[] {
+  // Everyone except the prompt author draws
+  const authorId = room.playerOrder[room.currentRound]
+  return room.playerOrder.filter(id => id !== authorId)
 }
 
 export function calculateRoundResults(room: Room): Drawing[] {
-  // Sort current round drawings by votes
   const sorted = [...room.currentRoundDrawings].sort((a, b) => b.votes.length - a.votes.length)
 
-  // Award points
   sorted.forEach((drawing, index) => {
     const player = room.players.get(drawing.playerId)
     if (player) {
@@ -123,7 +118,7 @@ export function calculateRoundResults(room: Room): Drawing[] {
 }
 
 export function hasMoreRounds(room: Room): boolean {
-  return room.drawingRound < room.totalRounds
+  return room.currentRound < room.totalRounds - 1
 }
 
 export function resetForNewGame(room: Room): void {
@@ -131,16 +126,15 @@ export function resetForNewGame(room: Room): void {
   room.prompts.clear()
   room.drawings = []
   room.currentRoundDrawings = []
-  room.promptAssignments.clear()
-  room.drawingRound = 0
+  room.currentRound = 0
   room.totalRounds = 0
   room.playerOrder = []
+  room.currentPromptAuthorId = ''
   if (room.roundTimer) {
     clearTimeout(room.roundTimer)
     room.roundTimer = null
   }
   room.timerEnd = null
-  // Reset scores
   for (const player of room.players.values()) {
     player.score = 0
   }

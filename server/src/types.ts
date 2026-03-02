@@ -1,4 +1,4 @@
-export type GamePhase = 'lobby' | 'prompts' | 'drawing' | 'voting' | 'results'
+export type GamePhase = 'lobby' | 'prompts' | 'drawing' | 'voting' | 'round-results' | 'results'
 
 export interface Player {
   id: string
@@ -24,11 +24,11 @@ export interface Room {
   phase: GamePhase
   prompts: Map<string, string> // playerId → prompt text
   drawings: Drawing[]
-  currentRoundDrawings: Drawing[] // drawings for the current round only
-  promptAssignments: Map<string, string> // playerId → prompt they must draw
+  currentRoundDrawings: Drawing[] // drawings for current round only
   roundTimer: ReturnType<typeof setTimeout> | null
   timerEnd: number | null
-  drawingRound: number // current drawing round (1-based)
-  totalRounds: number // total drawing rounds (players - 1)
-  playerOrder: string[] // fixed order for rotation
+  currentRound: number // which prompt we're on (0-based index into playerOrder)
+  totalRounds: number // total prompts = number of players
+  playerOrder: string[] // fixed order — determines whose prompt is used each round
+  currentPromptAuthorId: string // whose prompt is being drawn this round
 }

@@ -46,6 +46,8 @@ interface GameContextType {
   drawingRound: number
   totalRounds: number
   roundResults: { drawings: ResultEntry[]; leaderboard: LeaderboardEntry[] } | null
+  isPromptAuthor: boolean
+  waitingMessage: string
   createRoom: (nickname: string) => void
   joinRoom: (code: string, nickname: string) => void
   startGame: () => void
@@ -69,6 +71,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [drawingRound, setDrawingRound] = useState<number>(0)
   const [totalRounds, setTotalRounds] = useState<number>(0)
   const [roundResults, setRoundResults] = useState<{ drawings: ResultEntry[]; leaderboard: LeaderboardEntry[] } | null>(null)
+  const [isPromptAuthor, setIsPromptAuthor] = useState<boolean>(false)
+  const [waitingMessage, setWaitingMessage] = useState<string>('')
 
   useEffect(() => {
     if (!socket.connected) {
@@ -83,20 +87,30 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setRoom(data)
     })
 
-    socket.on('game-phase', ({ phase, timerEnd: te, drawingRound: dr, totalRounds: tr }: { phase: string; timerEnd?: number; drawingRound?: number; totalRounds?: number }) => {
+    socket.on('game-phase', ({ phase, timerEnd: te, currentRound: cr, totalRounds: tr, promptAuthorId }: { phase: string; timerEnd?: number; currentRound?: number; totalRounds?: number; promptAuthorId?: string }) => {
       setRoom(prev => prev ? { ...prev, phase } : null)
       setTimerEnd(te || null)
-      if (dr !== undefined) setDrawingRound(dr)
+      if (cr !== undefined) setDrawingRound(cr)
       if (tr !== undefined) setTotalRounds(tr)
+
+      // Check if this player is the prompt author for this round
+      const amAuthor = promptAuthorId === socket.id
+      setIsPromptAuthor(amAuthor)
 
       switch (phase) {
         case 'prompts':
           setRoundResults(null)
+          setIsPromptAuthor(false)
+          setWaitingMessage('')
           navigate('/prompt')
           break
         case 'drawing':
           setRoundResults(null)
-          navigate('/draw')
+          if (amAuthor) {
+            navigate('/waiting')
+          } else {
+            navigate('/draw')
+          }
           break
         case 'voting':
           navigate('/gallery')
@@ -107,6 +121,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
     })
 
+    socket.on('waiting-round', ({ message }: { message: string }) => {
+      setWaitingMessage(message)
+    })
+
     socket.on('assign-prompt', ({ prompt }: { prompt: string }) => {
       setAssignedPrompt(prompt)
     })
@@ -115,9 +133,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setDrawings(d)
     })
 
-    socket.on('round-results', ({ drawings: d, leaderboard: l, drawingRound: dr, totalRounds: tr }: { drawings: ResultEntry[]; leaderboard: LeaderboardEntry[]; drawingRound: number; totalRounds: number }) => {
+    socket.on('round-results', ({ drawings: d, leaderboard: l, currentRound: cr, totalRounds: tr }: { drawings: ResultEntry[]; leaderboard: LeaderboardEntry[]; currentRound: number; totalRounds: number }) => {
       setRoundResults({ drawings: d, leaderboard: l })
-      setDrawingRound(dr)
+      setDrawingRound(cr)
       setTotalRounds(tr)
       navigate('/round-results')
     })
@@ -137,6 +155,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       socket.off('room-update')
       socket.off('game-phase')
       socket.off('assign-prompt')
+      socket.off('waiting-round')
       socket.off('drawings')
       socket.off('round-results')
       socket.off('results')
@@ -184,6 +203,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       drawingRound,
       totalRounds,
       roundResults,
+      isPromptAuthor,
+      waitingMessage,
       createRoom,
       joinRoom,
       startGame,

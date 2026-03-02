@@ -8,7 +8,8 @@ import {
   getRoom,
   getRoomByPlayerId,
   removePlayer,
-  assignPromptsForRound,
+  getCurrentPrompt,
+  getDrawersForRound,
   calculateRoundResults,
   hasMoreRounds,
   resetForNewGame,
@@ -36,6 +37,7 @@ app.get('/health', (_req, res) => {
 const DRAW_TIME = 60 // seconds
 const PROMPT_TIME = 30 // seconds
 const VOTE_TIME = 30 // seconds
+const RESULTS_PAUSE = 8 // seconds between rounds
 
 io.on('connection', (socket) => {
   console.log(`Player connected: ${socket.id}`)
@@ -75,10 +77,10 @@ io.on('connection', (socket) => {
       return
     }
 
-    // Set up rounds: N-1 drawing rounds for N players
+    // Set up: one round per player's prompt
     room.playerOrder = [...room.players.keys()]
-    room.totalRounds = room.players.size - 1
-    room.drawingRound = 0
+    room.totalRounds = room.players.size
+    room.currentRound = 0
 
     room.phase = 'prompts'
     io.to(room.code).emit('game-phase', {
@@ -88,7 +90,7 @@ io.on('connection', (socket) => {
 
     room.timerEnd = Date.now() + PROMPT_TIME * 1000
     room.roundTimer = setTimeout(() => {
-      advanceToDrawing(room)
+      startDrawingRound(room)
     }, PROMPT_TIME * 1000)
   })
 
@@ -97,10 +99,9 @@ io.on('connection', (socket) => {
     if (!room || room.phase !== 'prompts') return
     room.prompts.set(socket.id, prompt.trim())
 
-    // If all players submitted, advance early
     if (room.prompts.size === room.players.size) {
       if (room.roundTimer) clearTimeout(room.roundTimer)
-      advanceToDrawing(room)
+      startDrawingRound(room)
     }
   })
 
@@ -111,33 +112,28 @@ io.on('connection', (socket) => {
     // Don't allow double submission
     if (room.currentRoundDrawings.some(d => d.playerId === socket.id)) return
 
-    const prompt = room.promptAssignments.get(socket.id) || 'Unknown'
-    const player = room.players.get(socket.id)
+    // Only drawers can submit (not the prompt author)
+    if (socket.id === room.currentPromptAuthorId) return
 
-    // Find who authored this prompt
-    let promptAuthorId = ''
-    for (const [pid, p] of room.prompts) {
-      if (p === prompt) {
-        promptAuthorId = pid
-        break
-      }
-    }
+    const { prompt, authorId } = getCurrentPrompt(room)
+    const player = room.players.get(socket.id)
 
     const drawing: import('./types.js').Drawing = {
       playerId: socket.id,
       playerNickname: player?.nickname || 'Anonymous',
       prompt,
-      promptAuthorId,
+      promptAuthorId: authorId,
       imageData,
       votes: [],
-      round: room.drawingRound,
+      round: room.currentRound,
     }
 
     room.currentRoundDrawings.push(drawing)
     room.drawings.push(drawing)
 
-    // If all submitted, advance early
-    if (room.currentRoundDrawings.length === room.players.size) {
+    // If all drawers submitted, advance early
+    const drawers = getDrawersForRound(room)
+    if (room.currentRoundDrawings.length === drawers.length) {
       if (room.roundTimer) clearTimeout(room.roundTimer)
       advanceToVoting(room)
     }
@@ -151,7 +147,7 @@ io.on('connection', (socket) => {
     // Can't vote for own drawing
     if (room.currentRoundDrawings[drawingIndex].playerId === socket.id) return
 
-    // Remove previous vote from this round's drawings
+    // Remove previous vote from this round
     room.currentRoundDrawings.forEach(d => {
       d.votes = d.votes.filter(v => v !== socket.id)
     })
@@ -159,7 +155,7 @@ io.on('connection', (socket) => {
     // Add new vote
     room.currentRoundDrawings[drawingIndex].votes.push(socket.id)
 
-    // Check if all players have voted (everyone can vote except their own drawing's author isn't restricted from voting)
+    // Everyone votes (including prompt author)
     const totalVotes = room.currentRoundDrawings.reduce((sum, d) => sum + d.votes.length, 0)
     if (totalVotes >= room.players.size) {
       if (room.roundTimer) clearTimeout(room.roundTimer)
@@ -175,7 +171,7 @@ io.on('connection', (socket) => {
 
     resetForNewGame(room)
     room.playerOrder = [...room.players.keys()]
-    room.totalRounds = room.players.size - 1
+    room.totalRounds = room.players.size
 
     room.phase = 'prompts'
     io.to(room.code).emit('game-phase', {
@@ -185,7 +181,7 @@ io.on('connection', (socket) => {
 
     room.timerEnd = Date.now() + PROMPT_TIME * 1000
     room.roundTimer = setTimeout(() => {
-      advanceToDrawing(room)
+      startDrawingRound(room)
     }, PROMPT_TIME * 1000)
   })
 
@@ -202,10 +198,10 @@ io.on('connection', (socket) => {
   })
 })
 
-function advanceToDrawing(room: ReturnType<typeof getRoom>) {
+function startDrawingRound(room: ReturnType<typeof getRoom>) {
   if (!room) return
 
-  // If some players didn't submit prompts, generate defaults
+  // Fill in default prompts for players who didn't submit
   for (const [id] of room.players) {
     if (!room.prompts.has(id)) {
       const defaults = ['A happy cat', 'A rocket ship', 'Pizza party', 'Dancing robot', 'Sunny beach']
@@ -213,24 +209,33 @@ function advanceToDrawing(room: ReturnType<typeof getRoom>) {
     }
   }
 
-  // Advance to next drawing round
-  room.drawingRound++
+  // Set up this round
   room.currentRoundDrawings = []
+  const { prompt, authorId } = getCurrentPrompt(room)
+  room.currentPromptAuthorId = authorId
+  const authorNickname = room.players.get(authorId)?.nickname || 'Someone'
 
-  assignPromptsForRound(room)
   room.phase = 'drawing'
   room.timerEnd = Date.now() + DRAW_TIME * 1000
 
-  // Send each player their assigned prompt
-  for (const [playerId, prompt] of room.promptAssignments) {
+  // Tell drawers to draw
+  const drawers = getDrawersForRound(room)
+  for (const playerId of drawers) {
     io.to(playerId).emit('assign-prompt', { prompt })
   }
+
+  // Tell the author they're waiting
+  io.to(authorId).emit('waiting-round', {
+    message: `Others are drawing your prompt: "${prompt}"`,
+  })
 
   io.to(room.code).emit('game-phase', {
     phase: 'drawing',
     timerEnd: room.timerEnd,
-    drawingRound: room.drawingRound,
+    currentRound: room.currentRound + 1,
     totalRounds: room.totalRounds,
+    promptAuthorId: authorId,
+    promptAuthorNickname: authorNickname,
   })
 
   room.roundTimer = setTimeout(() => {
@@ -243,13 +248,17 @@ function advanceToVoting(room: ReturnType<typeof getRoom>) {
   room.phase = 'voting'
   room.timerEnd = Date.now() + VOTE_TIME * 1000
 
+  const { prompt } = getCurrentPrompt(room)
+
   io.to(room.code).emit('game-phase', {
     phase: 'voting',
-    drawingRound: room.drawingRound,
+    currentRound: room.currentRound + 1,
     totalRounds: room.totalRounds,
     timerEnd: room.timerEnd,
   })
+
   io.to(room.code).emit('drawings', {
+    prompt,
     drawings: room.currentRoundDrawings.map((d, i) => ({
       index: i,
       prompt: d.prompt,
@@ -266,44 +275,53 @@ function advanceToVoting(room: ReturnType<typeof getRoom>) {
 function advanceToRoundResults(room: ReturnType<typeof getRoom>) {
   if (!room) return
 
+  room.phase = 'round-results'
   const results = calculateRoundResults(room)
 
-  if (hasMoreRounds(room)) {
-    // Show round results, then auto-advance to next drawing round
-    io.to(room.code).emit('round-results', {
-      drawingRound: room.drawingRound,
-      totalRounds: room.totalRounds,
-      drawings: results.map(d => ({
-        playerNickname: d.playerNickname,
-        prompt: d.prompt,
-        imageData: d.imageData,
-        votes: d.votes.length,
-      })),
-      leaderboard: getSerializablePlayers(room)
-        .sort((a, b) => b.score - a.score)
-        .map(p => ({ nickname: p.nickname, score: p.score, isHost: p.isHost })),
-    })
+  io.to(room.code).emit('round-results', {
+    currentRound: room.currentRound + 1,
+    totalRounds: room.totalRounds,
+    drawings: results.map(d => ({
+      playerNickname: d.playerNickname,
+      prompt: d.prompt,
+      imageData: d.imageData,
+      votes: d.votes.length,
+    })),
+    leaderboard: getSerializablePlayers(room)
+      .sort((a, b) => b.score - a.score)
+      .map(p => ({ nickname: p.nickname, score: p.score, isHost: p.isHost })),
+  })
 
-    // Auto-advance to next drawing round after 8 seconds
-    room.roundTimer = setTimeout(() => {
-      advanceToDrawing(room)
-    }, 8000)
-  } else {
-    // Final results
-    room.phase = 'results'
-    io.to(room.code).emit('game-phase', { phase: 'results' })
-    io.to(room.code).emit('results', {
-      drawings: results.map(d => ({
+  // After pause, go to next round or final results
+  room.roundTimer = setTimeout(() => {
+    if (hasMoreRounds(room)) {
+      room.currentRound++
+      startDrawingRound(room)
+    } else {
+      showFinalResults(room)
+    }
+  }, RESULTS_PAUSE * 1000)
+}
+
+function showFinalResults(room: ReturnType<typeof getRoom>) {
+  if (!room) return
+  room.phase = 'results'
+
+  io.to(room.code).emit('game-phase', { phase: 'results' })
+  io.to(room.code).emit('results', {
+    drawings: room.drawings
+      .sort((a, b) => b.votes.length - a.votes.length)
+      .slice(0, 6)
+      .map(d => ({
         playerNickname: d.playerNickname,
         prompt: d.prompt,
         imageData: d.imageData,
         votes: d.votes.length,
       })),
-      leaderboard: getSerializablePlayers(room)
-        .sort((a, b) => b.score - a.score)
-        .map(p => ({ nickname: p.nickname, score: p.score, isHost: p.isHost })),
-    })
-  }
+    leaderboard: getSerializablePlayers(room)
+      .sort((a, b) => b.score - a.score)
+      .map(p => ({ nickname: p.nickname, score: p.score, isHost: p.isHost })),
+  })
 }
 
 const PORT = process.env.PORT || 3001
