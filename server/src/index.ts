@@ -115,14 +115,14 @@ io.on('connection', (socket) => {
     // Only drawers can submit (not the prompt author)
     if (socket.id === room.currentPromptAuthorId) return
 
-    const { prompt, authorId } = getCurrentPrompt(room)
+    const { prompt } = getCurrentPrompt(room)
     const player = room.players.get(socket.id)
 
     const drawing: import('./types.js').Drawing = {
       playerId: socket.id,
       playerNickname: player?.nickname || 'Anonymous',
       prompt,
-      promptAuthorId: authorId,
+      promptAuthorId: room.currentPromptAuthorId,
       imageData,
       votes: [],
       round: room.currentRound,
@@ -133,6 +133,17 @@ io.on('connection', (socket) => {
 
     // If all drawers submitted, advance early
     const drawers = getDrawersForRound(room)
+
+    // Notify prompt author that a drawing was submitted (spy mode)
+    if (room.currentPromptAuthorId) {
+      io.to(room.currentPromptAuthorId).emit('spy-drawing', {
+        imageData: drawing.imageData,
+        playerNickname: drawing.playerNickname,
+        count: room.currentRoundDrawings.length,
+        total: drawers.length,
+      })
+    }
+
     if (room.currentRoundDrawings.length === drawers.length) {
       if (room.roundTimer) clearTimeout(room.roundTimer)
       advanceToVoting(room)
@@ -147,17 +158,23 @@ io.on('connection', (socket) => {
     // Can't vote for own drawing
     if (room.currentRoundDrawings[drawingIndex].playerId === socket.id) return
 
-    // Remove previous vote from this round
+    // Remove previous vote from this round (including bonus)
     room.currentRoundDrawings.forEach(d => {
-      d.votes = d.votes.filter(v => v !== socket.id)
+      d.votes = d.votes.filter(v => v !== socket.id && v !== socket.id + '-bonus')
     })
 
-    // Add new vote
+    // Add new vote (prompt author's vote counts double)
     room.currentRoundDrawings[drawingIndex].votes.push(socket.id)
+    if (socket.id === room.currentPromptAuthorId) {
+      room.currentRoundDrawings[drawingIndex].votes.push(socket.id + '-bonus')
+    }
 
     // Everyone votes (including prompt author)
-    const totalVotes = room.currentRoundDrawings.reduce((sum, d) => sum + d.votes.length, 0)
-    if (totalVotes >= room.players.size) {
+    const totalVoters = room.players.size
+    const uniqueVoters = new Set(
+      room.currentRoundDrawings.flatMap(d => d.votes.map(v => v.replace('-bonus', '')))
+    )
+    if (uniqueVoters.size >= totalVoters) {
       if (room.roundTimer) clearTimeout(room.roundTimer)
       advanceToRoundResults(room)
     }

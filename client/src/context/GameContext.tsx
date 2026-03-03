@@ -35,6 +35,13 @@ export interface LeaderboardEntry {
   isHost: boolean
 }
 
+export interface SpyDrawing {
+  imageData: string
+  playerNickname: string
+  count: number
+  total: number
+}
+
 interface GameContextType {
   room: RoomState | null
   error: string | null
@@ -48,6 +55,7 @@ interface GameContextType {
   roundResults: { drawings: ResultEntry[]; leaderboard: LeaderboardEntry[] } | null
   isPromptAuthor: boolean
   waitingMessage: string
+  spyDrawings: SpyDrawing[]
   createRoom: (nickname: string) => void
   joinRoom: (code: string, nickname: string) => void
   startGame: () => void
@@ -73,6 +81,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [roundResults, setRoundResults] = useState<{ drawings: ResultEntry[]; leaderboard: LeaderboardEntry[] } | null>(null)
   const [isPromptAuthor, setIsPromptAuthor] = useState<boolean>(false)
   const [waitingMessage, setWaitingMessage] = useState<string>('')
+  const [spyDrawings, setSpyDrawings] = useState<SpyDrawing[]>([])
 
   useEffect(() => {
     if (!socket.connected) {
@@ -123,6 +132,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     socket.on('waiting-round', ({ message }: { message: string }) => {
       setWaitingMessage(message)
+      setSpyDrawings([])
+    })
+
+    socket.on('spy-drawing', (data: SpyDrawing) => {
+      setSpyDrawings(prev => [...prev, data])
     })
 
     socket.on('assign-prompt', ({ prompt }: { prompt: string }) => {
@@ -156,6 +170,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       socket.off('game-phase')
       socket.off('assign-prompt')
       socket.off('waiting-round')
+      socket.off('spy-drawing')
       socket.off('drawings')
       socket.off('round-results')
       socket.off('results')
@@ -205,6 +220,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       roundResults,
       isPromptAuthor,
       waitingMessage,
+      spyDrawings,
       createRoom,
       joinRoom,
       startGame,

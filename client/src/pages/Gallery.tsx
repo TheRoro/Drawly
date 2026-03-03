@@ -3,7 +3,7 @@ import { useGame } from '../context/GameContext'
 import { socket } from '../socket'
 
 export default function Gallery() {
-  const { drawings, submitVote } = useGame()
+  const { drawings, submitVote, isPromptAuthor } = useGame()
   const [voted, setVoted] = useState<number | null>(null)
 
   const handleVote = (index: number) => {
@@ -18,9 +18,14 @@ export default function Gallery() {
       <h2 className="font-pacifico text-5xl text-ink-200 text-center mb-2 animate-bounce-in">
         🗳️ Vote!
       </h2>
-      <p className="text-ink-100 text-center mb-8 text-lg">
+      <p className="text-ink-100 text-center mb-4 text-lg">
         Pick your favorite drawing
       </p>
+      {isPromptAuthor && (
+        <p className="text-center mb-6 text-sm bg-yellow-100 rounded-lg px-4 py-2 inline-block mx-auto w-fit">
+          ⭐ Your vote counts <span className="font-bold">2x</span> — it's your prompt!
+        </p>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
         {drawings.map((drawing, i) => (
