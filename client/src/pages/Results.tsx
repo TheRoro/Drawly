@@ -38,12 +38,15 @@ export default function Results() {
           <h3 className="font-shadows text-3xl text-ink-200 text-center mb-6">Top Drawings</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {results.slice(0, 3).map((result, i) => (
-              <div key={i} className="card text-center animate-slide-up" style={{ animationDelay: `${i * 150}ms` }}>
+              <div key={i} className="card text-center animate-slide-up relative" style={{ animationDelay: `${i * 150}ms` }}>
+                <div className="absolute -top-3 -right-3 bg-blue-500 text-white rounded-full w-10 h-10 flex items-center justify-center font-bold text-lg shadow-lg">
+                  {result.votes}
+                </div>
                 <span className="text-3xl">{MEDALS[i]}</span>
                 <p className="font-shadows text-lg text-ink-100 mt-2">"{result.prompt}"</p>
                 <img src={result.imageData} alt={result.prompt} className="w-full rounded-xl mt-3 border border-paper-300" />
                 <p className="mt-2 text-ink-200 font-medium">by {result.playerNickname}</p>
-                <p className="text-ink-100">{result.votes} vote{result.votes !== 1 ? 's' : ''}</p>
+                <p className="text-ink-100 text-sm">{result.votes} vote{result.votes !== 1 ? 's' : ''}</p>
               </div>
             ))}
           </div>

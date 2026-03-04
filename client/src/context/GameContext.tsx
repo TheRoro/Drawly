@@ -19,7 +19,8 @@ export interface DrawingEntry {
   index: number
   prompt: string
   imageData: string
-  playerNickname: string
+  playerId?: string
+  playerNickname?: string
 }
 
 export interface ResultEntry {

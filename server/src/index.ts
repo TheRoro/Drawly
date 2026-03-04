@@ -280,7 +280,8 @@ function advanceToVoting(room: ReturnType<typeof getRoom>) {
       index: i,
       prompt: d.prompt,
       imageData: d.imageData,
-      playerNickname: d.playerNickname,
+      playerId: d.playerId, // for self-vote prevention
+      // playerNickname hidden until results
     })),
   })
 
