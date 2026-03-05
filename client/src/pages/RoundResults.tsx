@@ -43,6 +43,12 @@ export default function RoundResults() {
               }`}
             >
               <span className="text-xl">{MEDALS[i] || `#${i + 1}`}</span>
+              <div
+                className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs shadow"
+                style={{ backgroundColor: entry.color }}
+              >
+                {entry.nickname.charAt(0).toUpperCase()}
+              </div>
               <span className="text-ink-200 font-medium flex-1">{entry.nickname}</span>
               <span className="font-bold text-ink-200">{entry.score} pts</span>
             </div>

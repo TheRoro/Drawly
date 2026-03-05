@@ -31,8 +31,14 @@ export default function Lobby() {
               key={player.id}
               className="flex items-center gap-3 bg-paper-200 rounded-lg px-4 py-2 animate-fade-in"
             >
-              <span className="text-2xl">{player.isHost ? '👑' : '✏️'}</span>
+              <div
+                className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-md"
+                style={{ backgroundColor: player.color }}
+              >
+                {player.nickname.charAt(0).toUpperCase()}
+              </div>
               <span className="text-lg font-medium text-ink-200">{player.nickname}</span>
+              {player.isHost && <span className="text-sm">👑</span>}
               {player.id === socket.id && (
                 <span className="ml-auto text-xs bg-blue-200 text-blue-700 px-2 py-1 rounded-full">You</span>
               )}

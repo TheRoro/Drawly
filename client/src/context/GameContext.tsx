@@ -7,6 +7,7 @@ export interface Player {
   nickname: string
   isHost: boolean
   score: number
+  color: string
 }
 
 export interface RoomState {
@@ -34,6 +35,7 @@ export interface LeaderboardEntry {
   nickname: string
   score: number
   isHost: boolean
+  color: string
 }
 
 export interface SpyDrawing {

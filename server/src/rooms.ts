@@ -2,6 +2,24 @@ import { Room, Player, GamePhase, Drawing } from './types.js'
 
 const rooms = new Map<string, Room>()
 
+const PLAYER_COLORS = [
+  '#ef4444', // red
+  '#3b82f6', // blue
+  '#22c55e', // green
+  '#f59e0b', // amber
+  '#8b5cf6', // purple
+  '#ec4899', // pink
+  '#06b6d4', // cyan
+  '#f97316', // orange
+  '#14b8a6', // teal
+  '#6366f1', // indigo
+]
+
+function getNextColor(room: Room): string {
+  const usedColors = [...room.players.values()].map(p => p.color)
+  return PLAYER_COLORS.find(c => !usedColors.includes(c)) || PLAYER_COLORS[room.players.size % PLAYER_COLORS.length]
+}
+
 function generateCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   let code = ''
@@ -13,16 +31,9 @@ function generateCode(): string {
 
 export function createRoom(hostId: string, nickname: string): Room {
   const code = generateCode()
-  const host: Player = {
-    id: hostId,
-    nickname,
-    isHost: true,
-    score: 0,
-    connected: true,
-  }
   const room: Room = {
     code,
-    players: new Map([[hostId, host]]),
+    players: new Map(),
     phase: 'lobby',
     prompts: new Map(),
     drawings: [],
@@ -34,6 +45,15 @@ export function createRoom(hostId: string, nickname: string): Room {
     playerOrder: [],
     currentPromptAuthorId: '',
   }
+  const host: Player = {
+    id: hostId,
+    nickname,
+    isHost: true,
+    score: 0,
+    connected: true,
+    color: getNextColor(room),
+  }
+  room.players.set(hostId, host)
   rooms.set(code, room)
   return room
 }
@@ -50,6 +70,7 @@ export function joinRoom(code: string, playerId: string, nickname: string): Room
     isHost: false,
     score: 0,
     connected: true,
+    color: getNextColor(room),
   }
   room.players.set(playerId, player)
   return room

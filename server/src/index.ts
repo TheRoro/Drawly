@@ -307,7 +307,7 @@ function advanceToRoundResults(room: ReturnType<typeof getRoom>) {
     })),
     leaderboard: getSerializablePlayers(room)
       .sort((a, b) => b.score - a.score)
-      .map(p => ({ nickname: p.nickname, score: p.score, isHost: p.isHost })),
+      .map(p => ({ nickname: p.nickname, score: p.score, isHost: p.isHost, color: p.color })),
   })
 
   // After pause, go to next round or final results
@@ -338,7 +338,7 @@ function showFinalResults(room: ReturnType<typeof getRoom>) {
       })),
     leaderboard: getSerializablePlayers(room)
       .sort((a, b) => b.score - a.score)
-      .map(p => ({ nickname: p.nickname, score: p.score, isHost: p.isHost })),
+      .map(p => ({ nickname: p.nickname, score: p.score, isHost: p.isHost, color: p.color })),
   })
 }
 

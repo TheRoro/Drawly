@@ -6,6 +6,7 @@ export interface Player {
   isHost: boolean
   score: number
   connected: boolean
+  color: string
 }
 
 export interface Drawing {
