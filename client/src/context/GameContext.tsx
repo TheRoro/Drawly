@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { socket } from '../socket'
 
@@ -107,17 +107,35 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [spyDrawings, setSpyDrawings] = useState<SpyDrawing[]>([])
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [reactions, setReactions] = useState<Reaction[]>([])
+  const nicknameRef = useRef<string>('')
+  const roomCodeRef = useRef<string>('')
 
   useEffect(() => {
     if (!socket.connected) {
       socket.connect()
     }
 
+    // On reconnect, try to rejoin the room
+    socket.on('connect', () => {
+      const code = roomCodeRef.current
+      const nickname = nicknameRef.current
+      if (code && nickname) {
+        socket.emit('rejoin-room', { code, nickname })
+      }
+    })
+
+    socket.on('disconnect', () => {
+      setError('Connection lost — reconnecting...')
+      setTimeout(() => setError(null), 3000)
+    })
+
     socket.on('room-created', ({ code }: { code: string }) => {
+      roomCodeRef.current = code
       setRoom(prev => prev ? { ...prev, code } : { players: [], phase: 'lobby', code })
     })
 
     socket.on('room-update', (data: RoomState) => {
+      roomCodeRef.current = data.code
       setRoom(data)
     })
 
@@ -211,7 +229,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setReactions(prev => [...prev.slice(-49), reaction])
     })
 
+    socket.on('room-expired', () => {
+      setRoom(null)
+      navigate('/')
+    })
+
     return () => {
+      socket.off('connect')
+      socket.off('disconnect')
       socket.off('room-created')
       socket.off('room-update')
       socket.off('game-phase')
@@ -225,14 +250,17 @@ export function GameProvider({ children }: { children: ReactNode }) {
       socket.off('error')
       socket.off('chat-message')
       socket.off('reaction')
+      socket.off('room-expired')
     }
   }, [navigate])
 
   const createRoom = useCallback((nickname: string) => {
+    nicknameRef.current = nickname
     socket.emit('create-room', { nickname })
   }, [])
 
   const joinRoom = useCallback((code: string, nickname: string) => {
+    nicknameRef.current = nickname
     socket.emit('join-room', { code, nickname })
   }, [])
 

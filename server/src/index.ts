@@ -67,11 +67,42 @@ io.on('connection', (socket) => {
     })
   })
 
+  socket.on('rejoin-room', ({ code, nickname }: { code: string; nickname: string }) => {
+    const room = getRoom(code)
+    if (!room) {
+      // Room was lost (server restart) — tell client to go back to home
+      socket.emit('error', { message: 'Room expired. Please create a new room.' })
+      socket.emit('room-expired')
+      return
+    }
+    // Re-add player to room if not already in it
+    if (!room.players.has(socket.id)) {
+      const result = joinRoom(code, socket.id, nickname)
+      if (!result) {
+        // Game in progress, can't rejoin as new player
+        socket.emit('error', { message: 'Game already in progress' })
+        return
+      }
+    }
+    socket.join(room.code)
+    io.to(room.code).emit('room-update', {
+      players: getSerializablePlayers(room),
+      phase: room.phase,
+      code: room.code,
+    })
+  })
+
   socket.on('start-game', () => {
     const room = getRoomByPlayerId(socket.id)
-    if (!room) return
+    if (!room) {
+      socket.emit('error', { message: 'Room not found. Try refreshing.' })
+      return
+    }
     const player = room.players.get(socket.id)
-    if (!player?.isHost) return
+    if (!player?.isHost) {
+      socket.emit('error', { message: 'Only the host can start the game' })
+      return
+    }
     if (room.players.size < 2) {
       socket.emit('error', { message: 'Need at least 2 players to start' })
       return

@@ -53,7 +53,7 @@ export default function Lobby() {
             onClick={startGame}
             disabled={!room || room.players.length < 2}
           >
-            {room && room.players.length < 2 ? 'Need 2+ players' : '🚀 Start Game!'}
+            {!room || room.players.length < 2 ? `Need 2+ players (${room?.players.length || 0} joined)` : '🚀 Start Game!'}
           </button>
         ) : (
           <p className="text-center text-ink-100 text-lg">
