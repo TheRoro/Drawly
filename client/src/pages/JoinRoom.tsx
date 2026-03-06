@@ -2,6 +2,8 @@ import { useState, useEffect, FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useGame } from '../context/GameContext'
 
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || ''
+
 export default function JoinRoom() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -11,6 +13,7 @@ export default function JoinRoom() {
   const [nickname, setNickname] = useState('')
   const [roomCode, setRoomCode] = useState('')
   const [waiting, setWaiting] = useState(false)
+  const [waking, setWaking] = useState(false)
 
   // Navigate to lobby once the server confirms room
   useEffect(() => {
@@ -19,9 +22,40 @@ export default function JoinRoom() {
     }
   }, [waiting, room, navigate])
 
-  const handleSubmit = (e: FormEvent) => {
+  const wakeServer = async (): Promise<boolean> => {
+    setWaking(true)
+    try {
+      const response = await fetch(`${SERVER_URL}/health`, { signal: AbortSignal.timeout(15000) })
+      if (response.ok) {
+        setWaking(false)
+        return true
+      }
+    } catch {
+      // First attempt failed, retry once (cold start can take ~30s)
+      try {
+        await new Promise(r => setTimeout(r, 3000))
+        const response = await fetch(`${SERVER_URL}/health`, { signal: AbortSignal.timeout(30000) })
+        if (response.ok) {
+          setWaking(false)
+          return true
+        }
+      } catch {
+        // Still failed
+      }
+    }
+    setWaking(false)
+    return false
+  }
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!nickname.trim()) return
+
+    // Wake the server first
+    const serverReady = await wakeServer()
+    if (!serverReady) {
+      return // error will show via socket
+    }
 
     if (mode === 'create') {
       createRoom(nickname.trim())
@@ -69,10 +103,20 @@ export default function JoinRoom() {
             />
           )}
 
-          <button type="submit" className={mode === 'create' ? 'btn-green mt-4' : 'btn-blue mt-4'}>
-            {mode === 'create' ? "Let's Go!" : 'Join'}
+          <button
+            type="submit"
+            className={mode === 'create' ? 'btn-green mt-4' : 'btn-blue mt-4'}
+            disabled={waking}
+          >
+            {waking ? '⏳ Waking up server...' : mode === 'create' ? "Let's Go!" : 'Join'}
           </button>
         </form>
+
+        {waking && (
+          <p className="mt-4 text-ink-100 text-center text-sm animate-pulse">
+            Free server is waking up, this can take ~30s...
+          </p>
+        )}
 
         {error && (
           <p className="mt-4 text-red-500 text-center font-medium animate-fade-in">
