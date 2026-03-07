@@ -110,15 +110,22 @@ export function removePlayer(playerId: string): Room | undefined {
 }
 
 export function getCurrentPrompt(room: Room): { prompt: string; authorId: string } {
-  const authorId = room.playerOrder[room.currentRound]
+  let authorId = room.playerOrder[room.currentRound]
+  // If the author disconnected, use their prompt still (it was submitted) but assign author role to first player
+  if (!room.players.has(authorId)) {
+    // Use the prompt they submitted, but any connected player can be the "author"
+    const prompt = room.prompts.get(authorId) || 'Mystery prompt'
+    const fallbackAuthor = [...room.players.keys()][0] || authorId
+    return { prompt, authorId: fallbackAuthor }
+  }
   const prompt = room.prompts.get(authorId) || 'Mystery prompt'
   return { prompt, authorId }
 }
 
 export function getDrawersForRound(room: Room): string[] {
-  // Everyone except the prompt author draws
+  // Everyone except the prompt author draws (only connected players)
   const authorId = room.playerOrder[room.currentRound]
-  return room.playerOrder.filter(id => id !== authorId)
+  return [...room.players.keys()].filter(id => id !== authorId)
 }
 
 export function calculateRoundResults(room: Room): Drawing[] {
@@ -139,7 +146,9 @@ export function calculateRoundResults(room: Room): Drawing[] {
 }
 
 export function hasMoreRounds(room: Room): boolean {
-  return room.currentRound < room.totalRounds - 1
+  // Use actual connected player count as max rounds (handles disconnects)
+  const maxRounds = Math.min(room.totalRounds, room.playerOrder.length)
+  return room.currentRound < maxRounds - 1
 }
 
 export function resetForNewGame(room: Room): void {

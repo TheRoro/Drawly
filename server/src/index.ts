@@ -292,6 +292,7 @@ io.on('connection', (socket) => {
 
 function startDrawingRound(room: ReturnType<typeof getRoom>) {
   if (!room) return
+  console.log(`[${room.code}] Starting drawing round ${room.currentRound + 1}/${room.totalRounds}, players: ${room.players.size}`)
 
   // Fill in default prompts for players who didn't submit
   for (const [id] of room.players) {
@@ -351,14 +352,36 @@ function startDrawingRound(room: ReturnType<typeof getRoom>) {
 
 function advanceToVoting(room: ReturnType<typeof getRoom>) {
   if (!room) return
-  room.phase = 'voting'
-  room.timerEnd = Date.now() + VOTE_TIME * 1000
-
+  
   // Clear snapshot interval
   if ((room as any)._snapshotInterval) {
     clearInterval((room as any)._snapshotInterval)
     ;(room as any)._snapshotInterval = null
   }
+
+  // If no drawings submitted, skip voting and go to next round
+  if (room.currentRoundDrawings.length === 0) {
+    room.phase = 'round-results'
+    room.roundTimer = setTimeout(() => {
+      if (hasMoreRounds(room)) {
+        room.currentRound++
+        startDrawingRound(room)
+      } else {
+        showFinalResults(room)
+      }
+    }, 3000)
+    return
+  }
+
+  // If only 1 drawing, skip voting (auto-win)
+  if (room.currentRoundDrawings.length === 1) {
+    room.currentRoundDrawings[0].votes.push('auto-win')
+    advanceToRoundResults(room)
+    return
+  }
+
+  room.phase = 'voting'
+  room.timerEnd = Date.now() + VOTE_TIME * 1000
 
   const { prompt } = getCurrentPrompt(room)
 
@@ -387,6 +410,7 @@ function advanceToVoting(room: ReturnType<typeof getRoom>) {
 
 function advanceToRoundResults(room: ReturnType<typeof getRoom>) {
   if (!room) return
+  console.log(`[${room.code}] Round ${room.currentRound + 1} results — ${room.currentRoundDrawings.length} drawings`)
 
   room.phase = 'round-results'
   const results = calculateRoundResults(room)
