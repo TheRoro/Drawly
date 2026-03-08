@@ -1,6 +1,7 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useGame } from '../context/GameContext'
+import ServerStatus from '../components/ServerStatus'
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || ''
 
@@ -68,7 +69,10 @@ export default function JoinRoom() {
   }
 
   return (
-    <section className="w-screen h-screen bg-paper-pattern bg-no-repeat bg-cover flex flex-col items-center justify-center p-6">
+    <section className="w-screen h-screen bg-paper-pattern bg-no-repeat bg-cover flex flex-col items-center justify-center p-6 relative">
+      <div className="absolute top-4 right-4">
+        <ServerStatus />
+      </div>
       <button
         className="absolute top-6 left-6 text-ink-100 hover:text-ink-200 text-lg transition-colors"
         onClick={() => navigate('/')}

@@ -1,10 +1,15 @@
 import { useNavigate } from 'react-router-dom'
+import ServerStatus from '../components/ServerStatus'
 
 export default function Home() {
   const navigate = useNavigate()
 
   return (
-    <section className="w-screen h-screen bg-paper-pattern bg-no-repeat bg-cover flex items-center justify-center p-6">
+    <section className="w-screen h-screen bg-paper-pattern bg-no-repeat bg-cover flex items-center justify-center p-6 relative">
+      <div className="absolute top-4 right-4">
+        <ServerStatus />
+      </div>
+
       <div className="flex flex-col lg:flex-row items-center gap-12 max-w-5xl w-full">
         <div className="flex-1 flex flex-col items-center gap-6">
           <h1 className="font-pacifico text-7xl lg:text-9xl text-ink-200 text-center animate-bounce-in">
