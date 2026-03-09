@@ -178,14 +178,27 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setSpyDrawings([])
     })
 
-    socket.on('spy-drawing', (data: SpyDrawing) => {
-      setSpyDrawings(prev => [...prev, data])
+    socket.on('spy-drawing', (data: SpyDrawing & { playerId?: string }) => {
+      setSpyDrawings(prev => {
+        // Replace existing snapshot entry for this player with submitted version
+        if (data.playerId) {
+          const existing = prev.findIndex(s => (s as any).playerId === data.playerId)
+          const entry = { ...data, submitted: true } as any
+          if (existing >= 0) {
+            const updated = [...prev]
+            updated[existing] = entry
+            return updated
+          }
+          return [...prev, entry]
+        }
+        return [...prev, { ...data, submitted: true } as any]
+      })
     })
 
     socket.on('spy-snapshot', ({ playerId, playerNickname, imageData }: { playerId: string; playerNickname: string; imageData: string }) => {
       setSpyDrawings(prev => {
-        const existing = prev.findIndex(s => (s as any).playerId === playerId)
-        const entry = { playerId, playerNickname, imageData, count: 0, total: 0 } as any
+        const existing = prev.findIndex(s => (s as any).playerId === playerId && !(s as any).submitted)
+        const entry = { playerId, playerNickname, imageData, count: 0, total: 0, submitted: false } as any
         if (existing >= 0) {
           const updated = [...prev]
           updated[existing] = entry

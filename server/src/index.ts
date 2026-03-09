@@ -172,7 +172,13 @@ io.on('connection', (socket) => {
     if (!room || room.phase !== 'drawing') return
     if (socket.id === room.currentPromptAuthorId) return
     const player = room.players.get(socket.id)
-    // Forward snapshot to prompt author
+
+    // Store last snapshot for auto-submit on timeout
+    const lastSnapshots: Map<string, string> = (room as any)._lastSnapshots || new Map()
+    lastSnapshots.set(socket.id, imageData)
+    ;(room as any)._lastSnapshots = lastSnapshots
+
+    // Forward snapshot to prompt author (spy mode)
     io.to(room.currentPromptAuthorId).emit('spy-snapshot', {
       playerId: socket.id,
       playerNickname: player?.nickname || 'Anonymous',
@@ -212,6 +218,7 @@ io.on('connection', (socket) => {
     // Notify prompt author that a drawing was submitted (spy mode)
     if (room.currentPromptAuthorId) {
       io.to(room.currentPromptAuthorId).emit('spy-drawing', {
+        playerId: socket.id,
         imageData: drawing.imageData,
         playerNickname: drawing.playerNickname,
         count: room.currentRoundDrawings.length,
@@ -304,6 +311,7 @@ function startDrawingRound(room: ReturnType<typeof getRoom>) {
 
   // Set up this round
   room.currentRoundDrawings = []
+  ;(room as any)._lastSnapshots = new Map<string, string>() // Store last snapshot per player
   const { prompt, authorId } = getCurrentPrompt(room)
   room.currentPromptAuthorId = authorId
   const authorNickname = room.players.get(authorId)?.nickname || 'Someone'
@@ -332,6 +340,29 @@ function startDrawingRound(room: ReturnType<typeof getRoom>) {
   })
 
   room.roundTimer = setTimeout(() => {
+    // Auto-submit any missing drawings using last snapshots
+    const submittedIds = new Set(room.currentRoundDrawings.map(d => d.playerId))
+    const lastSnapshots: Map<string, string> = (room as any)._lastSnapshots || new Map()
+    const { prompt: roundPrompt } = getCurrentPrompt(room)
+
+    for (const playerId of drawers) {
+      if (!submittedIds.has(playerId) && lastSnapshots.has(playerId)) {
+        const player = room.players.get(playerId)
+        const drawing: import('./types.js').Drawing = {
+          playerId,
+          playerNickname: player?.nickname || 'Anonymous',
+          prompt: roundPrompt,
+          promptAuthorId: room.currentPromptAuthorId,
+          imageData: lastSnapshots.get(playerId)!,
+          votes: [],
+          round: room.currentRound,
+        }
+        room.currentRoundDrawings.push(drawing)
+        room.drawings.push(drawing)
+        console.log(`[${room.code}] Auto-submitted drawing for ${player?.nickname || playerId}`)
+      }
+    }
+
     advanceToVoting(room)
   }, DRAW_TIME * 1000)
 

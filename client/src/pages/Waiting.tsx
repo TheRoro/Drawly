@@ -22,19 +22,20 @@ export default function Waiting() {
       {spyDrawings.length > 0 && (
         <div className="w-full max-w-4xl">
           <p className="text-ink-100 text-center mb-4 text-sm">
-            {spyDrawings.length} drawing{spyDrawings.length !== 1 ? 's' : ''} submitted...
+            {spyDrawings.filter((s: any) => s.submitted).length} of{' '}
+            {spyDrawings.length} drawing{spyDrawings.length !== 1 ? 's' : ''} submitted
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {spyDrawings.map((spy, i) => (
               <div key={i} className="card animate-slide-up" style={{ animationDelay: `${i * 100}ms` }}>
                 <p className="text-sm text-ink-100 text-center mb-2">
-                  {spy.playerNickname}
+                  {spy.playerNickname} {(spy as any).submitted ? '✅' : '🎨'}
                 </p>
                 <img
                   src={spy.imageData}
                   alt="Drawing in progress"
                   className="w-full rounded-xl border border-paper-300"
-                  style={{ filter: 'blur(4px)' }}
+                  style={{ filter: (spy as any).submitted ? 'blur(4px)' : 'blur(6px)' }}
                 />
               </div>
             ))}
