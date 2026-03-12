@@ -7,4 +7,10 @@ export const socket: Socket = io(URL, {
   reconnection: true,
   reconnectionAttempts: 10,
   reconnectionDelay: 1000,
+  transports: ['websocket', 'polling'],
+  timeout: 20000,
+})
+
+socket.on('connect_error', error => {
+  console.error('Socket connection failed:', error.message, error)
 })

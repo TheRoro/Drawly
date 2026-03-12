@@ -15,6 +15,7 @@ export default function JoinRoom() {
   const [roomCode, setRoomCode] = useState('')
   const [waiting, setWaiting] = useState(false)
   const [waking, setWaking] = useState(false)
+  const [wakeError, setWakeError] = useState<string | null>(null)
 
   // Navigate to lobby once the server confirms room
   useEffect(() => {
@@ -24,38 +25,50 @@ export default function JoinRoom() {
   }, [waiting, room, navigate])
 
   const wakeServer = async (): Promise<boolean> => {
+    setWakeError(null)
     setWaking(true)
+    let lastError = 'Health check timed out'
+
     try {
       const response = await fetch(`${SERVER_URL}/health`, { signal: AbortSignal.timeout(15000) })
       if (response.ok) {
         setWaking(false)
         return true
       }
-    } catch {
-      // First attempt failed, retry once (cold start can take ~30s)
-      try {
-        await new Promise(r => setTimeout(r, 3000))
-        const response = await fetch(`${SERVER_URL}/health`, { signal: AbortSignal.timeout(30000) })
-        if (response.ok) {
-          setWaking(false)
-          return true
-        }
-      } catch {
-        // Still failed
-      }
+      lastError = `Health check returned ${response.status}`
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : 'Network request failed'
     }
+
+    // First attempt failed, retry once (cold start can take ~30s)
+    try {
+      await new Promise(r => setTimeout(r, 3000))
+      const response = await fetch(`${SERVER_URL}/health`, { signal: AbortSignal.timeout(30000) })
+      if (response.ok) {
+        setWaking(false)
+        return true
+      }
+      lastError = `Health check returned ${response.status}`
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : 'Network request failed'
+    }
+
+    setWakeError(
+      `Can't reach game server — try mobile data or a different network. Possible causes: Render is still waking up, your home/corporate Wi-Fi is blocking the request, or the browser rejected the connection. Last error: ${lastError}`
+    )
     setWaking(false)
     return false
   }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    setWakeError(null)
     if (!nickname.trim()) return
 
     // Wake the server first
     const serverReady = await wakeServer()
     if (!serverReady) {
-      return // error will show via socket
+      return
     }
 
     if (mode === 'create') {
@@ -122,10 +135,11 @@ export default function JoinRoom() {
           </p>
         )}
 
-        {error && (
-          <p className="mt-4 text-red-500 text-center font-medium animate-fade-in">
-            {error}
-          </p>
+        {(wakeError || error) && (
+          <div className="mt-4 text-center animate-fade-in">
+            <p className="text-red-500 font-medium">{wakeError || error}</p>
+            {wakeError && <p className="mt-2 text-xs text-ink-100">If friends can connect on mobile data but not home Wi-Fi, the network is likely the problem.</p>}
+          </div>
         )}
       </div>
     </section>

@@ -129,6 +129,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setTimeout(() => setError(null), 3000)
     })
 
+    socket.on('connect_error', (err: Error & { description?: unknown }) => {
+      const detail = typeof err.message === 'string' && err.message ? err.message : 'Unknown connection error'
+      setError(`Can't connect to the game server (${detail}). Try mobile data or a different network.`)
+      setTimeout(() => setError(null), 5000)
+    })
+
     socket.on('room-created', ({ code }: { code: string }) => {
       roomCodeRef.current = code
       setRoom(prev => prev ? { ...prev, code } : { players: [], phase: 'lobby', code })
@@ -250,6 +256,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return () => {
       socket.off('connect')
       socket.off('disconnect')
+      socket.off('connect_error')
       socket.off('room-created')
       socket.off('room-update')
       socket.off('game-phase')

@@ -29,13 +29,20 @@ export default function ServerStatus() {
   const labels = {
     checking: 'Checking...',
     online: 'Server online',
-    offline: 'Server offline',
+    offline: "Can't reach game server",
   }
 
   return (
-    <div className="flex items-center gap-2 text-xs text-ink-100">
-      <span className={`w-2.5 h-2.5 rounded-full ${colors[status]} ${status === 'checking' ? 'animate-pulse' : ''} ${status === 'online' ? 'shadow-[0_0_6px_rgba(52,211,153,0.7)]' : ''}`} />
-      <span>{labels[status]}</span>
+    <div className="flex flex-col items-end text-right" title={status === 'offline' ? 'Try mobile data if this persists' : undefined}>
+      <div className="flex items-center gap-2 text-xs text-ink-100">
+        <span className={`w-2.5 h-2.5 rounded-full ${colors[status]} ${status === 'checking' ? 'animate-pulse' : ''} ${status === 'online' ? 'shadow-[0_0_6px_rgba(52,211,153,0.7)]' : ''}`} />
+        <span>{labels[status]}</span>
+      </div>
+      {status === 'offline' && (
+        <span className="mt-1 max-w-56 text-[11px] leading-4 text-ink-100/80">
+          This may be network-related. Try mobile data if this persists.
+        </span>
+      )}
     </div>
   )
 }
