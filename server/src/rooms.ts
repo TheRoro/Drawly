@@ -1,6 +1,8 @@
 import { Room, Player, GamePhase, Drawing } from './types.js'
 
 const rooms = new Map<string, Room>()
+const disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const DISCONNECT_GRACE_MS = 15_000
 
 const PLAYER_COLORS = [
   '#ef4444', // red
@@ -91,6 +93,12 @@ export function removePlayer(playerId: string): Room | undefined {
   const room = getRoomByPlayerId(playerId)
   if (!room) return undefined
 
+  const disconnectTimer = disconnectTimers.get(playerId)
+  if (disconnectTimer) {
+    clearTimeout(disconnectTimer)
+    disconnectTimers.delete(playerId)
+  }
+
   room.players.delete(playerId)
 
   if (room.players.size === 0) {
@@ -102,8 +110,93 @@ export function removePlayer(playerId: string): Room | undefined {
   // Transfer host if needed
   const wasHost = ![...room.players.values()].some(p => p.isHost)
   if (wasHost) {
-    const newHost = [...room.players.values()][0]
+    const newHost = [...room.players.values()].find(player => player.connected) || [...room.players.values()][0]
     if (newHost) newHost.isHost = true
+  }
+
+  return room
+}
+
+export function markDisconnected(playerId: string, onExpire?: () => void): Room | undefined {
+  const room = getRoomByPlayerId(playerId)
+  if (!room) return undefined
+
+  const player = room.players.get(playerId)
+  if (!player) return room
+
+  player.connected = false
+
+  const existingTimer = disconnectTimers.get(playerId)
+  if (existingTimer) clearTimeout(existingTimer)
+
+  const timer = setTimeout(() => {
+    disconnectTimers.delete(playerId)
+    onExpire?.()
+  }, DISCONNECT_GRACE_MS)
+
+  disconnectTimers.set(playerId, timer)
+  return room
+}
+
+export function reconnectPlayer(code: string, oldNickname: string, newSocketId: string): Room | null {
+  const room = rooms.get(code.toUpperCase())
+  if (!room) return null
+
+  const normalizedNickname = oldNickname.trim().toLowerCase()
+  const disconnectedEntry = [...room.players.entries()].find(([, player]) => {
+    return !player.connected && player.nickname.trim().toLowerCase() === normalizedNickname
+  })
+
+  if (!disconnectedEntry) return null
+
+  const [oldSocketId, player] = disconnectedEntry
+  const disconnectTimer = disconnectTimers.get(oldSocketId)
+  if (disconnectTimer) {
+    clearTimeout(disconnectTimer)
+    disconnectTimers.delete(oldSocketId)
+  }
+
+  room.players.delete(oldSocketId)
+  player.id = newSocketId
+  player.connected = true
+  room.players.set(newSocketId, player)
+
+  room.playerOrder = room.playerOrder.map(id => id === oldSocketId ? newSocketId : id)
+  if (room.currentPromptAuthorId === oldSocketId) {
+    room.currentPromptAuthorId = newSocketId
+  }
+
+  if (room.prompts.has(oldSocketId)) {
+    const prompt = room.prompts.get(oldSocketId)
+    room.prompts.delete(oldSocketId)
+    if (prompt !== undefined) room.prompts.set(newSocketId, prompt)
+  }
+
+  room.currentRoundDrawings.forEach(drawing => {
+    if (drawing.playerId === oldSocketId) drawing.playerId = newSocketId
+    if (drawing.promptAuthorId === oldSocketId) drawing.promptAuthorId = newSocketId
+    drawing.votes = drawing.votes.map(vote => {
+      if (vote === oldSocketId) return newSocketId
+      if (vote === `${oldSocketId}-bonus`) return `${newSocketId}-bonus`
+      return vote
+    })
+  })
+
+  room.drawings.forEach(drawing => {
+    if (drawing.playerId === oldSocketId) drawing.playerId = newSocketId
+    if (drawing.promptAuthorId === oldSocketId) drawing.promptAuthorId = newSocketId
+    drawing.votes = drawing.votes.map(vote => {
+      if (vote === oldSocketId) return newSocketId
+      if (vote === `${oldSocketId}-bonus`) return `${newSocketId}-bonus`
+      return vote
+    })
+  })
+
+  const lastSnapshots: Map<string, string> | undefined = (room as any)._lastSnapshots
+  if (lastSnapshots?.has(oldSocketId)) {
+    const snapshot = lastSnapshots.get(oldSocketId)
+    lastSnapshots.delete(oldSocketId)
+    if (snapshot !== undefined) lastSnapshots.set(newSocketId, snapshot)
   }
 
   return room
@@ -123,9 +216,10 @@ export function getCurrentPrompt(room: Room): { prompt: string; authorId: string
 }
 
 export function getDrawersForRound(room: Room): string[] {
-  // Everyone except the prompt author draws (only connected players)
   const authorId = room.playerOrder[room.currentRound]
-  return [...room.players.keys()].filter(id => id !== authorId)
+  return [...room.players.entries()]
+    .filter(([id, player]) => id !== authorId && player.connected)
+    .map(([id]) => id)
 }
 
 export function calculateRoundResults(room: Room): Drawing[] {

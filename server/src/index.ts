@@ -8,6 +8,8 @@ import {
   getRoom,
   getRoomByPlayerId,
   removePlayer,
+  markDisconnected,
+  reconnectPlayer,
   getCurrentPrompt,
   getDrawersForRound,
   calculateRoundResults,
@@ -94,16 +96,64 @@ io.on('connection', (socket) => {
   socket.on('rejoin-room', ({ code, nickname }: { code: string; nickname: string }) => {
     const room = getRoom(code)
     if (!room) {
-      // Room was lost (server restart) — tell client to go back to home
       socket.emit('error', { message: 'Room expired. Please create a new room.' })
       socket.emit('room-expired')
       return
     }
-    // Re-add player to room if not already in it
+
+    const reconnectedRoom = reconnectPlayer(code, nickname, socket.id)
+    if (reconnectedRoom) {
+      socket.join(reconnectedRoom.code)
+      io.to(reconnectedRoom.code).emit('room-update', {
+        players: getSerializablePlayers(reconnectedRoom),
+        phase: reconnectedRoom.phase,
+        code: reconnectedRoom.code,
+      })
+
+      if (reconnectedRoom.phase === 'drawing') {
+        const amAuthor = reconnectedRoom.currentPromptAuthorId === socket.id
+        if (amAuthor) {
+          socket.emit('waiting-round', { message: 'Others are drawing your prompt' })
+        } else {
+          const { prompt } = getCurrentPrompt(reconnectedRoom)
+          socket.emit('assign-prompt', { prompt })
+        }
+        socket.emit('game-phase', {
+          phase: 'drawing',
+          timerEnd: reconnectedRoom.timerEnd,
+          currentRound: reconnectedRoom.currentRound + 1,
+          totalRounds: reconnectedRoom.totalRounds,
+          promptAuthorId: reconnectedRoom.currentPromptAuthorId,
+        })
+      } else if (reconnectedRoom.phase === 'voting') {
+        const { prompt } = getCurrentPrompt(reconnectedRoom)
+        socket.emit('game-phase', {
+          phase: 'voting',
+          currentRound: reconnectedRoom.currentRound + 1,
+          totalRounds: reconnectedRoom.totalRounds,
+          timerEnd: reconnectedRoom.timerEnd,
+        })
+        socket.emit('drawings', {
+          prompt,
+          drawings: reconnectedRoom.currentRoundDrawings.map((d, i) => ({
+            index: i,
+            prompt: d.prompt,
+            imageData: d.imageData,
+            playerId: d.playerId,
+          })),
+        })
+      } else if (reconnectedRoom.phase === 'prompts') {
+        socket.emit('game-phase', {
+          phase: 'prompts',
+          timerEnd: reconnectedRoom.timerEnd,
+        })
+      }
+      return
+    }
+
     if (!room.players.has(socket.id)) {
       const result = joinRoom(code, socket.id, nickname)
       if (!result) {
-        // Game in progress, can't rejoin as new player
         socket.emit('error', { message: 'Game already in progress' })
         return
       }
@@ -276,7 +326,7 @@ io.on('connection', (socket) => {
     }
 
     // Everyone votes (including prompt author)
-    const totalVoters = room.players.size
+    const totalVoters = [...room.players.values()].filter(player => player.connected).length
     const uniqueVoters = new Set(
       room.currentRoundDrawings.flatMap(d => d.votes.map(v => v.replace('-bonus', '')))
     )
@@ -310,12 +360,37 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log(`Player disconnected: ${socket.id}`)
-    const room = removePlayer(socket.id)
-    if (room) {
-      io.to(room.code).emit('room-update', {
-        players: getSerializablePlayers(room),
-        phase: room.phase,
-        code: room.code,
+    const room = getRoomByPlayerId(socket.id)
+    if (!room) return
+
+    if (room.phase === 'lobby') {
+      const updatedRoom = removePlayer(socket.id)
+      if (updatedRoom) {
+        io.to(updatedRoom.code).emit('room-update', {
+          players: getSerializablePlayers(updatedRoom),
+          phase: updatedRoom.phase,
+          code: updatedRoom.code,
+        })
+      }
+      return
+    }
+
+    const disconnectedRoom = markDisconnected(socket.id, () => {
+      const updatedRoom = removePlayer(socket.id)
+      if (updatedRoom) {
+        io.to(updatedRoom.code).emit('room-update', {
+          players: getSerializablePlayers(updatedRoom),
+          phase: updatedRoom.phase,
+          code: updatedRoom.code,
+        })
+      }
+    })
+
+    if (disconnectedRoom) {
+      io.to(disconnectedRoom.code).emit('room-update', {
+        players: getSerializablePlayers(disconnectedRoom),
+        phase: disconnectedRoom.phase,
+        code: disconnectedRoom.code,
       })
     }
   })

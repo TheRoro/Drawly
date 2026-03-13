@@ -7,6 +7,7 @@ export interface Player {
   nickname: string
   isHost: boolean
   score: number
+  connected: boolean
   color: string
 }
 
@@ -115,8 +116,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       socket.connect()
     }
 
-    // On reconnect, try to rejoin the room
     socket.on('connect', () => {
+      setError(null)
       const code = roomCodeRef.current
       const nickname = nicknameRef.current
       if (code && nickname) {
@@ -124,9 +125,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
     })
 
-    socket.on('disconnect', () => {
-      setError('Connection lost — reconnecting...')
-      setTimeout(() => setError(null), 3000)
+    socket.on('disconnect', (reason) => {
+      if (reason === 'io server disconnect') {
+        setError('Disconnected by server')
+      } else {
+        setError('Connection lost — reconnecting...')
+      }
     })
 
     socket.on('connect_error', (err: Error & { description?: unknown }) => {
