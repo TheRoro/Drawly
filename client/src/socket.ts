@@ -14,3 +14,26 @@ export const socket: Socket = io(URL, {
 socket.on('connect_error', error => {
   console.error('Socket connection failed:', error.message, error)
 })
+
+// Server time offset: difference between server clock and client clock.
+// serverTime ≈ Date.now() + serverTimeOffset
+export let serverTimeOffset = 0
+
+socket.on('connect', () => {
+  syncTime()
+})
+
+function syncTime() {
+  const clientSend = Date.now()
+  socket.emit('time-sync', { clientSend }, ({ serverTime }: { serverTime: number }) => {
+    const clientReceive = Date.now()
+    const roundTrip = clientReceive - clientSend
+    // Estimate server's current time accounting for half the round-trip
+    serverTimeOffset = serverTime - clientSend - Math.round(roundTrip / 2)
+  })
+}
+
+/** Convert a server timerEnd to a local-clock timerEnd */
+export function toLocalTime(serverTimerEnd: number): number {
+  return serverTimerEnd - serverTimeOffset
+}

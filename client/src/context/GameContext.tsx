@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { socket } from '../socket'
+import { socket, toLocalTime } from '../socket'
 
 export interface Player {
   id: string
@@ -151,7 +151,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     socket.on('game-phase', ({ phase, timerEnd: te, currentRound: cr, totalRounds: tr, promptAuthorId }: { phase: string; timerEnd?: number; currentRound?: number; totalRounds?: number; promptAuthorId?: string }) => {
       setRoom(prev => prev ? { ...prev, phase } : null)
-      setTimerEnd(te || null)
+      setTimerEnd(te ? toLocalTime(te) : null)
       if (cr !== undefined) setDrawingRound(cr)
       if (tr !== undefined) setTotalRounds(tr)
 

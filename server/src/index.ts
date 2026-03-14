@@ -68,6 +68,13 @@ const RESULTS_PAUSE = 8 // seconds between rounds
 io.on('connection', (socket) => {
   console.log(`Player connected: ${socket.id}`)
 
+  // Time sync: client calculates clock offset to align timers
+  socket.on('time-sync', (_data: any, callback: (res: { serverTime: number }) => void) => {
+    if (typeof callback === 'function') {
+      callback({ serverTime: Date.now() })
+    }
+  })
+
   socket.on('create-room', ({ nickname }: { nickname: string }) => {
     const room = createRoom(socket.id, nickname)
     socket.join(room.code)
