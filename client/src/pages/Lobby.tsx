@@ -1,11 +1,22 @@
+import { useState } from 'react'
 import { useGame } from '../context/GameContext'
 import { socket } from '../socket'
 import Chat from '../components/Chat'
 
 export default function Lobby() {
   const { room, startGame, error } = useGame()
+  const [copied, setCopied] = useState(false)
 
   const isHost = room?.players.find(p => p.id === socket.id)?.isHost
+
+  const copyInviteLink = () => {
+    if (!room?.code) return
+    const link = `${window.location.origin}/join?mode=join&code=${room.code}`
+    navigator.clipboard.writeText(link).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
 
   return (
     <section className="w-screen h-screen bg-paper-pattern bg-no-repeat bg-cover flex flex-col items-center justify-center p-6">
@@ -20,6 +31,12 @@ export default function Lobby() {
             <p className="font-mono text-3xl font-bold text-ink-200 tracking-[0.3em] bg-paper-300 rounded-lg py-2 px-4 inline-block">
               {room.code}
             </p>
+            <button
+              onClick={copyInviteLink}
+              className="block mx-auto mt-2 text-sm px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-full transition-colors"
+            >
+              {copied ? '✅ Copied!' : '🔗 Copy invite link'}
+            </button>
           </div>
         )}
 

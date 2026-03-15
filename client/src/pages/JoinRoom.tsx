@@ -12,10 +12,13 @@ export default function JoinRoom() {
   const { createRoom, joinRoom, error, room } = useGame()
 
   const [nickname, setNickname] = useState('')
-  const [roomCode, setRoomCode] = useState('')
+  const [roomCode, setRoomCode] = useState(searchParams.get('code')?.toUpperCase() || '')
   const [waiting, setWaiting] = useState(false)
   const [waking, setWaking] = useState(false)
   const [wakeError, setWakeError] = useState<string | null>(null)
+
+  // If a code was passed in URL, force join mode
+  const effectiveMode = roomCode && searchParams.get('code') ? 'join' : mode
 
   // Navigate to lobby once the server confirms room
   useEffect(() => {
@@ -71,7 +74,7 @@ export default function JoinRoom() {
       return
     }
 
-    if (mode === 'create') {
+    if (effectiveMode === 'create') {
       createRoom(nickname.trim())
       setWaiting(true)
     } else {
@@ -95,7 +98,7 @@ export default function JoinRoom() {
 
       <div className="card max-w-sm w-full animate-slide-up">
         <h2 className="font-pacifico text-4xl text-ink-200 text-center mb-8">
-          {mode === 'create' ? '🎨 Create Room' : '🚪 Join Room'}
+          {effectiveMode === 'create' ? '🎨 Create Room' : '🚪 Join Room'}
         </h2>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -109,7 +112,7 @@ export default function JoinRoom() {
             autoFocus
           />
 
-          {mode === 'join' && (
+          {effectiveMode === 'join' && (
             <input
               className="input-field uppercase tracking-widest text-center"
               type="text"
@@ -122,10 +125,10 @@ export default function JoinRoom() {
 
           <button
             type="submit"
-            className={mode === 'create' ? 'btn-green mt-4' : 'btn-blue mt-4'}
+            className={effectiveMode === 'create' ? 'btn-green mt-4' : 'btn-blue mt-4'}
             disabled={waking}
           >
-            {waking ? '⏳ Waking up server...' : mode === 'create' ? "Let's Go!" : 'Join'}
+            {waking ? '⏳ Waking up server...' : effectiveMode === 'create' ? "Let's Go!" : 'Join'}
           </button>
         </form>
 
