@@ -4,8 +4,13 @@ import { socket } from '../socket'
 import Timer from '../components/Timer'
 import Chat from '../components/Chat'
 
-const COLORS = ['#1a1a1a', '#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#ffffff']
-const SIZES = [2, 4, 8, 14]
+const COLORS = [
+  '#1a1a1a', '#6b7280', '#ffffff',
+  '#ef4444', '#f97316', '#f59e0b', '#22c55e',
+  '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4',
+  '#92400e', '#365314',
+]
+const SIZES = [2, 5, 10, 18]
 
 export default function DrawPhase() {
   const { assignedPrompt, timerEnd, submitDrawing, drawingRound, totalRounds } = useGame()
@@ -168,13 +173,13 @@ export default function DrawPhase() {
 
       {/* Toolbar — bigger touch targets on mobile */}
       <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 w-full max-w-[800px]">
-        <div className="flex gap-1.5 sm:gap-1">
+        <div className="grid grid-cols-7 gap-1.5 sm:gap-1">
           {COLORS.map(c => (
             <button
               key={c}
               className={`w-9 h-9 sm:w-8 sm:h-8 rounded-full border-2 transition-transform touch-manipulation ${
                 color === c ? 'scale-125 border-ink-200' : 'border-paper-300'
-              }`}
+              } ${c === '#ffffff' ? 'ring-1 ring-gray-200' : ''}`}
               style={{ backgroundColor: c }}
               onClick={() => setColor(c)}
             />
@@ -185,12 +190,21 @@ export default function DrawPhase() {
           {SIZES.map(s => (
             <button
               key={s}
-              className={`rounded-full bg-ink-200 transition-transform touch-manipulation ${
-                brushSize === s ? 'ring-2 ring-blue-400 scale-110' : ''
+              className={`w-10 h-10 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center transition-transform touch-manipulation ${
+                brushSize === s ? 'ring-2 ring-blue-400 scale-110 bg-paper-300' : 'bg-paper-200 hover:bg-paper-300'
               }`}
-              style={{ width: Math.max(s + 16, 28), height: Math.max(s + 16, 28) }}
               onClick={() => setBrushSize(s)}
-            />
+              title={`${s}px`}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24">
+                <line
+                  x1="4" y1="12" x2="20" y2="12"
+                  stroke={color}
+                  strokeWidth={Math.max(s * 0.7, 1.5)}
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
           ))}
         </div>
 
