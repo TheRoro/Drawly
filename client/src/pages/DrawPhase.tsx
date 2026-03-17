@@ -17,7 +17,7 @@ export default function DrawPhase() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [color, setColor] = useState('#1a1a1a')
-  const [brushSize, setBrushSize] = useState(4)
+  const [brushSize, setBrushSize] = useState(5)
   const [submitted, setSubmitted] = useState(false)
   const lastPos = useRef<{ x: number; y: number } | null>(null)
   const submittedRef = useRef(false)
