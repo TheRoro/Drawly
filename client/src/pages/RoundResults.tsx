@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import confetti from 'canvas-confetti'
 import { useGame } from '../context/GameContext'
 import Reactions from '../components/Reactions'
 
@@ -11,7 +12,16 @@ export default function RoundResults() {
   // Animate vote reveal after a short delay
   useEffect(() => {
     setRevealedVotes(false)
-    const timer = setTimeout(() => setRevealedVotes(true), 800)
+    const timer = setTimeout(() => {
+      setRevealedVotes(true)
+      // Fire confetti for the round winner
+      confetti({
+        particleCount: 120,
+        spread: 80,
+        origin: { y: 0.6 },
+        colors: ['#f59e0b', '#ef4444', '#3b82f6', '#22c55e', '#8b5cf6'],
+      })
+    }, 800)
     return () => clearTimeout(timer)
   }, [roundResults])
 
