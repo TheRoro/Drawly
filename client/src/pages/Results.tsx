@@ -79,26 +79,34 @@ export default function Results() {
       <div className="card max-w-md mx-auto mb-10 animate-slide-up">
         <h3 className="font-shadows text-3xl text-ink-200 text-center mb-4">Leaderboard</h3>
         <div className="space-y-3">
-          {leaderboard.map((entry, i) => (
-            <div
-              key={entry.nickname}
-              className={`flex items-center gap-3 rounded-xl px-4 py-3 ${
-                i === 0 ? 'bg-yellow-100 ring-2 ring-yellow-400' : i === 1 ? 'bg-gray-100' : i === 2 ? 'bg-orange-50' : 'bg-paper-200'
-              }`}
-            >
-              <span className="text-2xl">{MEDALS[i] || `#${i + 1}`}</span>
+          {leaderboard.map((entry, i, arr) => {
+            const rank = i === 0 ? 1 : (entry.score === arr[i - 1].score ? null : i + 1)
+            const rankLabel = rank ? (MEDALS[rank - 1] || `#${rank}`) : '—'
+            const isFirst = i === 0 || entry.score === arr[0].score
+            const isSecond = !isFirst && (rank === 2 || (i > 0 && arr.findIndex(e => e.score === entry.score) === arr.findIndex(e => e.score === arr[1]?.score)))
+            const isThird = !isFirst && !isSecond && (rank === 3 || (i > 0 && arr.findIndex(e => e.score === entry.score) === arr.findIndex(e => e.score === arr[2]?.score)))
+
+            return (
               <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm shadow"
-                style={{ backgroundColor: entry.color }}
+                key={entry.nickname}
+                className={`flex items-center gap-3 rounded-xl px-4 py-3 ${
+                  isFirst ? 'bg-yellow-100 ring-2 ring-yellow-400' : isSecond ? 'bg-gray-100' : isThird ? 'bg-orange-50' : 'bg-paper-200'
+                }`}
               >
-                {entry.nickname.charAt(0).toUpperCase()}
+                <span className="text-2xl w-9 text-center">{rankLabel}</span>
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm shadow"
+                  style={{ backgroundColor: entry.color }}
+                >
+                  {entry.nickname.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-lg font-medium text-ink-200 flex-1">{entry.nickname}</span>
+                <span className="font-bold text-ink-200">
+                  <AnimatedScore target={entry.score} delay={i * 300} /> pts
+                </span>
               </div>
-              <span className="text-lg font-medium text-ink-200 flex-1">{entry.nickname}</span>
-              <span className="font-bold text-ink-200">
-                <AnimatedScore target={entry.score} delay={i * 300} /> pts
-              </span>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 

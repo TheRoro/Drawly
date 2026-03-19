@@ -46,24 +46,31 @@ export default function RoundResults() {
       <div className="card max-w-sm mx-auto mb-8 animate-slide-up">
         <h3 className="font-shadows text-2xl text-ink-200 text-center mb-3">Standings</h3>
         <div className="space-y-2">
-          {roundResults.leaderboard.map((entry, i) => (
-            <div
-              key={entry.nickname}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 ${
-                i === 0 ? 'bg-yellow-100' : 'bg-paper-200'
-              }`}
-            >
-              <span className="text-xl">{MEDALS[i] || `#${i + 1}`}</span>
+          {roundResults.leaderboard.map((entry, i, arr) => {
+            // Compute rank accounting for ties
+            const rank = i === 0 ? 1 : (entry.score === arr[i - 1].score ? undefined : i + 1)
+            const rankLabel = rank ? (MEDALS[rank - 1] || `#${rank}`) : '—'
+            const isFirst = i === 0 || entry.score === arr[0].score
+
+            return (
               <div
-                className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs shadow"
-                style={{ backgroundColor: entry.color }}
+                key={entry.nickname}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2 ${
+                  isFirst ? 'bg-yellow-100' : 'bg-paper-200'
+                }`}
               >
+                <span className="text-xl w-8 text-center">{rankLabel}</span>
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs shadow"
+                  style={{ backgroundColor: entry.color }}
+                >
                 {entry.nickname.charAt(0).toUpperCase()}
               </div>
               <span className="text-ink-200 font-medium flex-1">{entry.nickname}</span>
               <span className="font-bold text-ink-200">{entry.score} pts</span>
             </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 

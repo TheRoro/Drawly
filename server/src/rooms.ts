@@ -228,10 +228,10 @@ export function calculateRoundResults(room: Room): Drawing[] {
   sorted.forEach((drawing, index) => {
     const player = room.players.get(drawing.playerId)
     if (player) {
-      const points = drawing.votes.length * 100
-      if (index === 0) player.score += points + 300
-      else if (index === 1) player.score += points + 200
-      else if (index === 2) player.score += points + 100
+      const points = drawing.votes.length * 10
+      if (index === 0) player.score += points + 30
+      else if (index === 1) player.score += points + 20
+      else if (index === 2) player.score += points + 10
       else player.score += points
     }
   })
