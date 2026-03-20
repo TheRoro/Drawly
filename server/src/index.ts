@@ -154,6 +154,38 @@ io.on('connection', (socket) => {
           phase: 'prompts',
           timerEnd: reconnectedRoom.timerEnd,
         })
+      } else if (reconnectedRoom.phase === 'results') {
+        socket.emit('game-phase', { phase: 'results' })
+        socket.emit('results', {
+          drawings: reconnectedRoom.drawings
+            .sort((a, b) => b.votes.length - a.votes.length)
+            .slice(0, 6)
+            .map(d => ({
+              playerNickname: d.playerNickname,
+              prompt: d.prompt,
+              imageData: d.imageData,
+              votes: d.votes.length,
+            })),
+          leaderboard: getSerializablePlayers(reconnectedRoom)
+            .sort((a, b) => b.score - a.score)
+            .map(p => ({ nickname: p.nickname, score: p.score, isHost: p.isHost, color: p.color })),
+        })
+      } else if (reconnectedRoom.phase === 'round-results') {
+        const results = reconnectedRoom.currentRoundDrawings
+          .sort((a, b) => b.votes.length - a.votes.length)
+        socket.emit('round-results', {
+          currentRound: reconnectedRoom.currentRound + 1,
+          totalRounds: reconnectedRoom.totalRounds,
+          drawings: results.map(d => ({
+            playerNickname: d.playerNickname,
+            prompt: d.prompt,
+            imageData: d.imageData,
+            votes: d.votes.length,
+          })),
+          leaderboard: getSerializablePlayers(reconnectedRoom)
+            .sort((a, b) => b.score - a.score)
+            .map(p => ({ nickname: p.nickname, score: p.score, isHost: p.isHost, color: p.color })),
+        })
       }
       return
     }
