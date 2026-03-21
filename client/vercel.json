@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/api/health", "destination": "https://drawly-server.onrender.com/health" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

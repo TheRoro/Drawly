@@ -7,12 +7,20 @@ export default function ServerStatus() {
 
   useEffect(() => {
     const check = async () => {
-      try {
-        const res = await fetch(`${SERVER_URL}/health`, { signal: AbortSignal.timeout(5000) })
-        setStatus(res.ok ? 'online' : 'offline')
-      } catch {
-        setStatus('offline')
+      // Try same-origin proxy first, then direct cross-origin
+      const urls = ['/api/health', `${SERVER_URL}/health`]
+      for (const url of urls) {
+        try {
+          const res = await fetch(url, { signal: AbortSignal.timeout(5000) })
+          if (res.ok) {
+            setStatus('online')
+            return
+          }
+        } catch {
+          // try next
+        }
       }
+      setStatus('offline')
     }
 
     check()
