@@ -513,7 +513,7 @@ function startDrawingRound(room: ReturnType<typeof getRoom>) {
     for (const playerId of drawers) {
       io.to(playerId).emit('request-snapshot')
     }
-  }, 5000)
+  }, 2000)
 
   // Store interval to clear later
   ;(room as any)._snapshotInterval = snapshotInterval
