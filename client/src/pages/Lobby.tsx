@@ -50,10 +50,10 @@ export default function Lobby() {
               className="flex items-center gap-3 bg-paper-200 rounded-lg px-4 py-2 animate-fade-in"
             >
               <div
-                className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-md"
+                className="w-9 h-9 rounded-full flex items-center justify-center text-lg shadow-md"
                 style={{ backgroundColor: player.color }}
               >
-                {player.nickname.charAt(0).toUpperCase()}
+                {player.avatar || player.nickname.charAt(0).toUpperCase()}
               </div>
               <span className="text-lg font-medium text-ink-200">{player.nickname}</span>
               {player.isHost && <span className="text-sm">👑</span>}

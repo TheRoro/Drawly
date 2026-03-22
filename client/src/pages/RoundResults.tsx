@@ -61,11 +61,11 @@ export default function RoundResults() {
               >
                 <span className="text-xl w-8 text-center">{rankLabel}</span>
                 <div
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs shadow"
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-xs shadow"
                   style={{ backgroundColor: entry.color }}
                 >
-                {entry.nickname.charAt(0).toUpperCase()}
-              </div>
+                  {entry.avatar || entry.nickname.charAt(0).toUpperCase()}
+                </div>
               <span className="text-ink-200 font-medium flex-1">{entry.nickname}</span>
               <span className="font-bold text-ink-200">{entry.score} pts</span>
             </div>

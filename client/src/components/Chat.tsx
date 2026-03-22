@@ -68,10 +68,10 @@ export default function Chat() {
           return (
             <div key={msg.id} className={`flex gap-2 ${isMe ? 'flex-row-reverse' : ''}`}>
               <div
-                className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-white text-xs font-bold"
+                className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs"
                 style={{ backgroundColor: msg.color }}
               >
-                {msg.nickname.charAt(0).toUpperCase()}
+                {msg.avatar || msg.nickname.charAt(0).toUpperCase()}
               </div>
               <div className={`max-w-[75%] ${isMe ? 'text-right' : ''}`}>
                 {!isMe && (

@@ -4,6 +4,7 @@ import { useGame } from '../context/GameContext'
 import ServerStatus from '../components/ServerStatus'
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || ''
+const AVATARS = ['🐱', '🐶', '🦊', '🐸', '🐼', '🐨', '🦄', '🐙', '🐥', '🦋', '🐢', '🦈', '🤖', '👻', '🎃', '👽', '🧠', '🔥', '⭐', '🍕', '🎮', '🌈', '💎', '🍄']
 
 export default function JoinRoom() {
   const navigate = useNavigate()
@@ -12,6 +13,7 @@ export default function JoinRoom() {
   const { createRoom, joinRoom, error, room } = useGame()
 
   const [nickname, setNickname] = useState('')
+  const [avatar, setAvatar] = useState('')
   const [roomCode, setRoomCode] = useState(searchParams.get('code')?.toUpperCase() || '')
   const [waiting, setWaiting] = useState(false)
   const [waking, setWaking] = useState(false)
@@ -32,18 +34,23 @@ export default function JoinRoom() {
     setWaking(true)
     let lastError = 'Health check timed out'
 
-    try {
-      const response = await fetch(`${SERVER_URL}/health`, { signal: AbortSignal.timeout(15000) })
-      if (response.ok) {
-        setWaking(false)
-        return true
+    // Try same-origin proxy first (avoids cross-origin blocking), then direct
+    const urls = ['/api/health', `${SERVER_URL}/health`]
+
+    for (const url of urls) {
+      try {
+        const response = await fetch(url, { signal: AbortSignal.timeout(15000) })
+        if (response.ok) {
+          setWaking(false)
+          return true
+        }
+        lastError = `Health check returned ${response.status}`
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : 'Network request failed'
       }
-      lastError = `Health check returned ${response.status}`
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : 'Network request failed'
     }
 
-    // First attempt failed, retry once (cold start can take ~30s)
+    // Both failed — retry direct once more (cold start can take ~30s)
     try {
       await new Promise(r => setTimeout(r, 3000))
       const response = await fetch(`${SERVER_URL}/health`, { signal: AbortSignal.timeout(30000) })
@@ -74,12 +81,14 @@ export default function JoinRoom() {
       return
     }
 
+    const selectedAvatar = avatar || AVATARS[Math.floor(Math.random() * AVATARS.length)]
+
     if (effectiveMode === 'create') {
-      createRoom(nickname.trim())
+      createRoom(nickname.trim(), selectedAvatar)
       setWaiting(true)
     } else {
       if (!roomCode.trim()) return
-      joinRoom(roomCode.trim().toUpperCase(), nickname.trim())
+      joinRoom(roomCode.trim().toUpperCase(), nickname.trim(), selectedAvatar)
       setWaiting(true)
     }
   }
@@ -111,6 +120,22 @@ export default function JoinRoom() {
             maxLength={15}
             autoFocus
           />
+
+          <div className="text-center">
+            <p className="text-ink-100 text-sm mb-2">Pick your avatar</p>
+            <div className="grid grid-cols-8 gap-2">
+              {AVATARS.map(emoji => (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => setAvatar(emoji)}
+                  className={`text-2xl w-10 h-10 rounded-lg transition-all ${avatar === emoji ? 'bg-blue-100 scale-110 ring-2 ring-blue-400' : 'hover:bg-paper-200'}`}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {effectiveMode === 'join' && (
             <input

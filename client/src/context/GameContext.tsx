@@ -5,6 +5,7 @@ import { socket, toLocalTime } from '../socket'
 export interface Player {
   id: string
   nickname: string
+  avatar: string
   isHost: boolean
   score: number
   connected: boolean
@@ -34,6 +35,7 @@ export interface ResultEntry {
 
 export interface LeaderboardEntry {
   nickname: string
+  avatar: string
   score: number
   isHost: boolean
   color: string
@@ -50,6 +52,7 @@ export interface ChatMessage {
   id: string
   playerId: string
   nickname: string
+  avatar: string
   color: string
   message: string
   timestamp: number
@@ -80,8 +83,8 @@ interface GameContextType {
   reactions: Reaction[]
   sendChatMessage: (message: string) => void
   sendReaction: (emoji: string) => void
-  createRoom: (nickname: string) => void
-  joinRoom: (code: string, nickname: string) => void
+  createRoom: (nickname: string, avatar: string) => void
+  joinRoom: (code: string, nickname: string, avatar: string) => void
   startGame: () => void
   submitPrompt: (prompt: string) => void
   submitDrawing: (imageData: string) => void
@@ -109,6 +112,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [reactions, setReactions] = useState<Reaction[]>([])
   const nicknameRef = useRef<string>('')
+  const avatarRef = useRef<string>('')
   const roomCodeRef = useRef<string>('')
 
   useEffect(() => {
@@ -121,7 +125,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const code = roomCodeRef.current
       const nickname = nicknameRef.current
       if (code && nickname) {
-        socket.emit('rejoin-room', { code, nickname })
+        socket.emit('rejoin-room', { code, nickname, avatar: avatarRef.current })
       }
     })
 
@@ -278,14 +282,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }
   }, [navigate])
 
-  const createRoom = useCallback((nickname: string) => {
+  const createRoom = useCallback((nickname: string, avatar: string) => {
     nicknameRef.current = nickname
-    socket.emit('create-room', { nickname })
+    avatarRef.current = avatar
+    socket.emit('create-room', { nickname, avatar })
   }, [])
 
-  const joinRoom = useCallback((code: string, nickname: string) => {
+  const joinRoom = useCallback((code: string, nickname: string, avatar: string) => {
     nicknameRef.current = nickname
-    socket.emit('join-room', { code, nickname })
+    avatarRef.current = avatar
+    socket.emit('join-room', { code, nickname, avatar })
   }, [])
 
   const startGame = useCallback(() => {

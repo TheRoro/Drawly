@@ -17,6 +17,16 @@ const PLAYER_COLORS = [
   '#6366f1', // indigo
 ]
 
+const AVATARS = ['🐱', '🐶', '🦊', '🐸', '🐼', '🐨', '🦄', '🐙', '🐥', '🦋', '🐢', '🦈', '🤖', '👻', '🎃', '👽', '🧠', '🔥', '⭐', '🍕', '🎮', '🌈', '💎', '🍄']
+
+function getRandomAvatar(): string {
+  return AVATARS[Math.floor(Math.random() * AVATARS.length)]
+}
+
+function normalizeAvatar(avatar?: string): string {
+  return avatar?.trim() || getRandomAvatar()
+}
+
 function getNextColor(room: Room): string {
   const usedColors = [...room.players.values()].map(p => p.color)
   return PLAYER_COLORS.find(c => !usedColors.includes(c)) || PLAYER_COLORS[room.players.size % PLAYER_COLORS.length]
@@ -31,7 +41,7 @@ function generateCode(): string {
   return rooms.has(code) ? generateCode() : code
 }
 
-export function createRoom(hostId: string, nickname: string): Room {
+export function createRoom(hostId: string, nickname: string, avatar?: string): Room {
   const code = generateCode()
   const room: Room = {
     code,
@@ -50,6 +60,7 @@ export function createRoom(hostId: string, nickname: string): Room {
   const host: Player = {
     id: hostId,
     nickname,
+    avatar: normalizeAvatar(avatar),
     isHost: true,
     score: 0,
     connected: true,
@@ -60,7 +71,7 @@ export function createRoom(hostId: string, nickname: string): Room {
   return room
 }
 
-export function joinRoom(code: string, playerId: string, nickname: string): Room | null {
+export function joinRoom(code: string, playerId: string, nickname: string, avatar?: string): Room | null {
   const room = rooms.get(code.toUpperCase())
   if (!room) return null
   if (room.phase !== 'lobby') return null
@@ -69,6 +80,7 @@ export function joinRoom(code: string, playerId: string, nickname: string): Room
   const player: Player = {
     id: playerId,
     nickname,
+    avatar: normalizeAvatar(avatar),
     isHost: false,
     score: 0,
     connected: true,

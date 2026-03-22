@@ -75,8 +75,8 @@ io.on('connection', (socket) => {
     }
   })
 
-  socket.on('create-room', ({ nickname }: { nickname: string }) => {
-    const room = createRoom(socket.id, nickname)
+  socket.on('create-room', ({ nickname, avatar }: { nickname: string; avatar: string }) => {
+    const room = createRoom(socket.id, nickname, avatar)
     socket.join(room.code)
     socket.emit('room-created', { code: room.code })
     socket.emit('room-update', {
@@ -86,8 +86,8 @@ io.on('connection', (socket) => {
     })
   })
 
-  socket.on('join-room', ({ code, nickname }: { code: string; nickname: string }) => {
-    const room = joinRoom(code, socket.id, nickname)
+  socket.on('join-room', ({ code, nickname, avatar }: { code: string; nickname: string; avatar: string }) => {
+    const room = joinRoom(code, socket.id, nickname, avatar)
     if (!room) {
       socket.emit('error', { message: 'Room not found, full, or game already started' })
       return
@@ -100,7 +100,7 @@ io.on('connection', (socket) => {
     })
   })
 
-  socket.on('rejoin-room', ({ code, nickname }: { code: string; nickname: string }) => {
+  socket.on('rejoin-room', ({ code, nickname, avatar }: { code: string; nickname: string; avatar: string }) => {
     const room = getRoom(code)
     if (!room) {
       socket.emit('error', { message: 'Room expired. Please create a new room.' })
@@ -168,7 +168,7 @@ io.on('connection', (socket) => {
             })),
           leaderboard: getSerializablePlayers(reconnectedRoom)
             .sort((a, b) => b.score - a.score)
-            .map(p => ({ nickname: p.nickname, score: p.score, isHost: p.isHost, color: p.color })),
+            .map(p => ({ nickname: p.nickname, avatar: p.avatar, score: p.score, isHost: p.isHost, color: p.color })),
         })
       } else if (reconnectedRoom.phase === 'round-results') {
         const results = reconnectedRoom.currentRoundDrawings
@@ -184,14 +184,14 @@ io.on('connection', (socket) => {
           })),
           leaderboard: getSerializablePlayers(reconnectedRoom)
             .sort((a, b) => b.score - a.score)
-            .map(p => ({ nickname: p.nickname, score: p.score, isHost: p.isHost, color: p.color })),
+            .map(p => ({ nickname: p.nickname, avatar: p.avatar, score: p.score, isHost: p.isHost, color: p.color })),
         })
       }
       return
     }
 
     if (!room.players.has(socket.id)) {
-      const result = joinRoom(code, socket.id, nickname)
+      const result = joinRoom(code, socket.id, nickname, avatar)
       if (!result) {
         socket.emit('error', { message: 'Game already in progress' })
         return
@@ -249,6 +249,7 @@ io.on('connection', (socket) => {
       id: `${socket.id}-${Date.now()}`,
       playerId: socket.id,
       nickname: player.nickname,
+      avatar: player.avatar,
       color: player.color,
       message: text,
       timestamp: Date.now(),
@@ -595,7 +596,7 @@ function advanceToRoundResults(room: ReturnType<typeof getRoom>) {
     })),
     leaderboard: getSerializablePlayers(room)
       .sort((a, b) => b.score - a.score)
-      .map(p => ({ nickname: p.nickname, score: p.score, isHost: p.isHost, color: p.color })),
+      .map(p => ({ nickname: p.nickname, avatar: p.avatar, score: p.score, isHost: p.isHost, color: p.color })),
   })
 
   // After pause, go to next round or final results
@@ -626,7 +627,7 @@ function showFinalResults(room: ReturnType<typeof getRoom>) {
       })),
     leaderboard: getSerializablePlayers(room)
       .sort((a, b) => b.score - a.score)
-      .map(p => ({ nickname: p.nickname, score: p.score, isHost: p.isHost, color: p.color })),
+      .map(p => ({ nickname: p.nickname, avatar: p.avatar, score: p.score, isHost: p.isHost, color: p.color })),
   })
 }
 

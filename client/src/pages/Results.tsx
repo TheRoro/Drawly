@@ -95,10 +95,10 @@ export default function Results() {
               >
                 <span className="text-2xl w-9 text-center">{rankLabel}</span>
                 <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm shadow"
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-sm shadow"
                   style={{ backgroundColor: entry.color }}
                 >
-                  {entry.nickname.charAt(0).toUpperCase()}
+                  {entry.avatar || entry.nickname.charAt(0).toUpperCase()}
                 </div>
                 <span className="text-lg font-medium text-ink-200 flex-1">{entry.nickname}</span>
                 <span className="font-bold text-ink-200">

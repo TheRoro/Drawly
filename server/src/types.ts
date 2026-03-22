@@ -3,6 +3,7 @@ export type GamePhase = 'lobby' | 'prompts' | 'drawing' | 'voting' | 'round-resu
 export interface Player {
   id: string
   nickname: string
+  avatar: string
   isHost: boolean
   score: number
   connected: boolean
