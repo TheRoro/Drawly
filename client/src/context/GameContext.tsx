@@ -77,6 +77,7 @@ interface GameContextType {
   totalRounds: number
   roundResults: { drawings: ResultEntry[]; leaderboard: LeaderboardEntry[] } | null
   isPromptAuthor: boolean
+  hasSubmittedDrawing: boolean
   waitingMessage: string
   spyDrawings: SpyDrawing[]
   chatMessages: ChatMessage[]
@@ -107,6 +108,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [totalRounds, setTotalRounds] = useState<number>(0)
   const [roundResults, setRoundResults] = useState<{ drawings: ResultEntry[]; leaderboard: LeaderboardEntry[] } | null>(null)
   const [isPromptAuthor, setIsPromptAuthor] = useState<boolean>(false)
+  const [hasSubmittedDrawing, setHasSubmittedDrawing] = useState<boolean>(false)
   const [waitingMessage, setWaitingMessage] = useState<string>('')
   const [spyDrawings, setSpyDrawings] = useState<SpyDrawing[]>([])
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
@@ -172,6 +174,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           break
         case 'drawing':
           setRoundResults(null)
+          setHasSubmittedDrawing(false)
           if (amAuthor) {
             navigate('/waiting')
           } else {
@@ -184,6 +187,41 @@ export function GameProvider({ children }: { children: ReactNode }) {
         case 'results':
           // Navigation happens in 'results' event handler when data arrives
           break
+      }
+    })
+
+    // Complete state restore for drawing phase rejoin
+    socket.on('drawing-state', (data: {
+      phase: string
+      role: 'drawer' | 'prompt-author'
+      prompt: string
+      hasSubmitted: boolean
+      timerEnd: number
+      currentRound: number
+      totalRounds: number
+      promptAuthorId: string
+      spyDrawings: { playerId: string; playerNickname: string; imageData: string; submitted: boolean }[]
+    }) => {
+      setRoom(prev => prev ? { ...prev, phase: data.phase } : null)
+      setTimerEnd(data.timerEnd ? toLocalTime(data.timerEnd) : null)
+      setDrawingRound(data.currentRound)
+      setTotalRounds(data.totalRounds)
+      setRoundResults(null)
+      setHasSubmittedDrawing(data.hasSubmitted)
+
+      if (data.role === 'prompt-author') {
+        setIsPromptAuthor(true)
+        setWaitingMessage(`Others are drawing your prompt: "${data.prompt}"`)
+        setSpyDrawings(data.spyDrawings.map(s => ({
+          ...s,
+          count: 0,
+          total: 0,
+        })) as any)
+        navigate('/waiting')
+      } else {
+        setIsPromptAuthor(false)
+        setAssignedPrompt(data.prompt)
+        navigate('/draw')
       }
     })
 
@@ -268,6 +306,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       socket.off('room-created')
       socket.off('room-update')
       socket.off('game-phase')
+      socket.off('drawing-state')
       socket.off('assign-prompt')
       socket.off('waiting-round')
       socket.off('spy-drawing')
@@ -335,6 +374,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       totalRounds,
       roundResults,
       isPromptAuthor,
+      hasSubmittedDrawing,
       waitingMessage,
       spyDrawings,
       chatMessages,

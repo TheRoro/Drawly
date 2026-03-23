@@ -119,18 +119,40 @@ io.on('connection', (socket) => {
 
       if (reconnectedRoom.phase === 'drawing') {
         const amAuthor = reconnectedRoom.currentPromptAuthorId === socket.id
+        const { prompt } = getCurrentPrompt(reconnectedRoom)
+        const hasSubmitted = reconnectedRoom.currentRoundDrawings.some(d => d.playerId === socket.id)
+
+        // Build spy drawings for prompt author
+        let spyData: { playerId: string; playerNickname: string; imageData: string; submitted: boolean }[] = []
         if (amAuthor) {
-          socket.emit('waiting-round', { message: 'Others are drawing your prompt' })
-        } else {
-          const { prompt } = getCurrentPrompt(reconnectedRoom)
-          socket.emit('assign-prompt', { prompt })
+          const lastSnapshots: Map<string, string> = (reconnectedRoom as any)._lastSnapshots || new Map()
+          const submittedIds = new Set(reconnectedRoom.currentRoundDrawings.map(d => d.playerId))
+          const drawers = getDrawersForRound(reconnectedRoom)
+          for (const playerId of drawers) {
+            const player = reconnectedRoom.players.get(playerId)
+            const nickname = player?.nickname || 'Anonymous'
+            if (submittedIds.has(playerId)) {
+              const drawing = reconnectedRoom.currentRoundDrawings.find(d => d.playerId === playerId)
+              if (drawing) {
+                spyData.push({ playerId, playerNickname: nickname, imageData: drawing.imageData, submitted: true })
+              }
+            } else if (lastSnapshots.has(playerId)) {
+              spyData.push({ playerId, playerNickname: nickname, imageData: lastSnapshots.get(playerId)!, submitted: false })
+            }
+          }
         }
-        socket.emit('game-phase', {
+
+        // Send one complete state snapshot for drawing phase rejoin
+        socket.emit('drawing-state', {
           phase: 'drawing',
+          role: amAuthor ? 'prompt-author' : 'drawer',
+          prompt,
+          hasSubmitted,
           timerEnd: reconnectedRoom.timerEnd,
           currentRound: reconnectedRoom.currentRound + 1,
           totalRounds: reconnectedRoom.totalRounds,
           promptAuthorId: reconnectedRoom.currentPromptAuthorId,
+          spyDrawings: spyData,
         })
       } else if (reconnectedRoom.phase === 'voting') {
         const { prompt } = getCurrentPrompt(reconnectedRoom)

@@ -13,14 +13,14 @@ const COLORS = [
 const SIZES = [2, 5, 10, 18]
 
 export default function DrawPhase() {
-  const { assignedPrompt, timerEnd, submitDrawing, drawingRound, totalRounds } = useGame()
+  const { assignedPrompt, timerEnd, submitDrawing, drawingRound, totalRounds, hasSubmittedDrawing } = useGame()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [color, setColor] = useState('#1a1a1a')
   const [brushSize, setBrushSize] = useState(5)
-  const [submitted, setSubmitted] = useState(false)
+  const [submitted, setSubmitted] = useState(hasSubmittedDrawing)
   const lastPos = useRef<{ x: number; y: number } | null>(null)
-  const submittedRef = useRef(false)
+  const submittedRef = useRef(hasSubmittedDrawing)
 
   useEffect(() => {
     const canvas = canvasRef.current
