@@ -113,9 +113,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [spyDrawings, setSpyDrawings] = useState<SpyDrawing[]>([])
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [reactions, setReactions] = useState<Reaction[]>([])
-  const nicknameRef = useRef<string>('')
-  const avatarRef = useRef<string>('')
-  const roomCodeRef = useRef<string>('')
+  const nicknameRef = useRef<string>(sessionStorage.getItem('drawly-nickname') || '')
+  const avatarRef = useRef<string>(sessionStorage.getItem('drawly-avatar') || '')
+  const roomCodeRef = useRef<string>(sessionStorage.getItem('drawly-room') || '')
 
   useEffect(() => {
     if (!socket.connected) {
@@ -147,11 +147,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     socket.on('room-created', ({ code }: { code: string }) => {
       roomCodeRef.current = code
+      sessionStorage.setItem('drawly-room', code)
       setRoom(prev => prev ? { ...prev, code } : { players: [], phase: 'lobby', code })
     })
 
     socket.on('room-update', (data: RoomState) => {
       roomCodeRef.current = data.code
+      sessionStorage.setItem('drawly-room', data.code)
       setRoom(data)
     })
 
@@ -296,6 +298,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     socket.on('room-expired', () => {
       setRoom(null)
+      sessionStorage.removeItem('drawly-room')
+      sessionStorage.removeItem('drawly-nickname')
+      sessionStorage.removeItem('drawly-avatar')
       navigate('/')
     })
 
@@ -324,12 +329,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const createRoom = useCallback((nickname: string, avatar: string) => {
     nicknameRef.current = nickname
     avatarRef.current = avatar
+    sessionStorage.setItem('drawly-nickname', nickname)
+    sessionStorage.setItem('drawly-avatar', avatar)
     socket.emit('create-room', { nickname, avatar })
   }, [])
 
   const joinRoom = useCallback((code: string, nickname: string, avatar: string) => {
     nicknameRef.current = nickname
     avatarRef.current = avatar
+    sessionStorage.setItem('drawly-nickname', nickname)
+    sessionStorage.setItem('drawly-avatar', avatar)
     socket.emit('join-room', { code, nickname, avatar })
   }, [])
 
