@@ -122,14 +122,23 @@ export function GameProvider({ children }: { children: ReactNode }) {
       socket.connect()
     }
 
-    socket.on('connect', () => {
+    const handleConnect = () => {
       setError(null)
       const code = roomCodeRef.current
       const nickname = nicknameRef.current
+      console.log('[Drawly] Socket connected, rejoin check:', { code, nickname, socketId: socket.id })
       if (code && nickname) {
+        console.log('[Drawly] Emitting rejoin-room:', { code, nickname })
         socket.emit('rejoin-room', { code, nickname, avatar: avatarRef.current })
       }
-    })
+    }
+
+    socket.on('connect', handleConnect)
+
+    // If socket already connected (e.g. StrictMode remount), rejoin immediately
+    if (socket.connected) {
+      handleConnect()
+    }
 
     socket.on('disconnect', (reason) => {
       if (reason === 'io server disconnect') {
@@ -204,6 +213,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       promptAuthorId: string
       spyDrawings: { playerId: string; playerNickname: string; imageData: string; submitted: boolean }[]
     }) => {
+      console.log('[Drawly] Received drawing-state:', data.role, data.prompt, data.hasSubmitted)
       setRoom(prev => prev ? { ...prev, phase: data.phase } : null)
       setTimerEnd(data.timerEnd ? toLocalTime(data.timerEnd) : null)
       setDrawingRound(data.currentRound)
