@@ -324,7 +324,10 @@ io.on('connection', (socket) => {
 
   socket.on('submit-drawing', ({ imageData }: { imageData: string }) => {
     const room = getRoomByPlayerId(socket.id)
-    if (!room || room.phase !== 'drawing') return
+    if (!room || room.phase !== 'drawing') {
+      console.log(`[submit-drawing] Rejected: no room or phase=${room?.phase} for ${socket.id}`)
+      return
+    }
 
     // Don't allow double submission
     if (room.currentRoundDrawings.some(d => d.playerId === socket.id)) return
@@ -351,6 +354,8 @@ io.on('connection', (socket) => {
     // If all drawers submitted, advance early
     const drawers = getDrawersForRound(room)
 
+    console.log(`[${room.code}] Drawing submitted by ${player?.nickname || socket.id} (${room.currentRoundDrawings.length}/${drawers.length} drawers)`)
+
     // Notify prompt author that a drawing was submitted (spy mode)
     if (room.currentPromptAuthorId) {
       io.to(room.currentPromptAuthorId).emit('spy-drawing', {
@@ -362,7 +367,8 @@ io.on('connection', (socket) => {
       })
     }
 
-    if (room.currentRoundDrawings.length === drawers.length) {
+    if (room.currentRoundDrawings.length >= drawers.length) {
+      console.log(`[${room.code}] All drawers submitted, advancing to voting`)
       if (room.roundTimer) clearTimeout(room.roundTimer)
       advanceToVoting(room)
     }
@@ -445,6 +451,20 @@ io.on('connection', (socket) => {
           phase: updatedRoom.phase,
           code: updatedRoom.code,
         })
+
+        // If the disconnected player was a drawer and all remaining drawers have submitted, advance
+        if (updatedRoom.phase === 'drawing') {
+          const drawers = getDrawersForRound(updatedRoom)
+          if (drawers.length > 0 && updatedRoom.currentRoundDrawings.length >= drawers.length) {
+            console.log(`[${updatedRoom.code}] All remaining drawers submitted after player removal, advancing`)
+            if (updatedRoom.roundTimer) clearTimeout(updatedRoom.roundTimer)
+            advanceToVoting(updatedRoom)
+          } else if (drawers.length === 0) {
+            console.log(`[${updatedRoom.code}] No drawers remaining after player removal, advancing`)
+            if (updatedRoom.roundTimer) clearTimeout(updatedRoom.roundTimer)
+            advanceToVoting(updatedRoom)
+          }
+        }
       }
     })
 
@@ -454,6 +474,20 @@ io.on('connection', (socket) => {
         phase: disconnectedRoom.phase,
         code: disconnectedRoom.code,
       })
+
+      // Check if disconnect means all remaining drawers have submitted (player marked disconnected reduces drawer count)
+      if (disconnectedRoom.phase === 'drawing' && socket.id !== disconnectedRoom.currentPromptAuthorId) {
+        const drawers = getDrawersForRound(disconnectedRoom)
+        if (drawers.length > 0 && disconnectedRoom.currentRoundDrawings.length >= drawers.length) {
+          console.log(`[${disconnectedRoom.code}] All connected drawers submitted after disconnect, advancing`)
+          if (disconnectedRoom.roundTimer) clearTimeout(disconnectedRoom.roundTimer)
+          advanceToVoting(disconnectedRoom)
+        } else if (drawers.length === 0) {
+          console.log(`[${disconnectedRoom.code}] No connected drawers remaining, advancing`)
+          if (disconnectedRoom.roundTimer) clearTimeout(disconnectedRoom.roundTimer)
+          advanceToVoting(disconnectedRoom)
+        }
+      }
     }
   })
 })
@@ -501,12 +535,13 @@ function startDrawingRound(room: ReturnType<typeof getRoom>) {
   })
 
   room.roundTimer = setTimeout(() => {
-    // Auto-submit any missing drawings using last snapshots
+    // Re-compute drawers at timer expiry (socket IDs may have changed due to reconnections)
+    const currentDrawers = getDrawersForRound(room)
     const submittedIds = new Set(room.currentRoundDrawings.map(d => d.playerId))
     const lastSnapshots: Map<string, string> = (room as any)._lastSnapshots || new Map()
     const { prompt: roundPrompt } = getCurrentPrompt(room)
 
-    for (const playerId of drawers) {
+    for (const playerId of currentDrawers) {
       if (!submittedIds.has(playerId) && lastSnapshots.has(playerId)) {
         const player = room.players.get(playerId)
         const drawing: import('./types.js').Drawing = {
@@ -527,13 +562,15 @@ function startDrawingRound(room: ReturnType<typeof getRoom>) {
     advanceToVoting(room)
   }, DRAW_TIME * 1000)
 
-  // Request periodic snapshots for spy mode (every 5 seconds)
+  // Request periodic snapshots for spy mode (every 2 seconds)
+  // Re-compute drawers each tick so reconnected players get snapshot requests
   const snapshotInterval = setInterval(() => {
     if (room.phase !== 'drawing') {
       clearInterval(snapshotInterval)
       return
     }
-    for (const playerId of drawers) {
+    const currentDrawers = getDrawersForRound(room)
+    for (const playerId of currentDrawers) {
       io.to(playerId).emit('request-snapshot')
     }
   }, 2000)
@@ -545,6 +582,8 @@ function startDrawingRound(room: ReturnType<typeof getRoom>) {
 function advanceToVoting(room: ReturnType<typeof getRoom>) {
   if (!room) return
   
+  console.log(`[${room.code}] advanceToVoting: ${room.currentRoundDrawings.length} drawings`)
+
   // Clear snapshot interval
   if ((room as any)._snapshotInterval) {
     clearInterval((room as any)._snapshotInterval)
@@ -553,6 +592,7 @@ function advanceToVoting(room: ReturnType<typeof getRoom>) {
 
   // If no drawings submitted, skip voting and go to next round
   if (room.currentRoundDrawings.length === 0) {
+    console.log(`[${room.code}] No drawings, skipping to next round`)
     room.phase = 'round-results'
     room.roundTimer = setTimeout(() => {
       if (hasMoreRounds(room)) {
@@ -567,6 +607,7 @@ function advanceToVoting(room: ReturnType<typeof getRoom>) {
 
   // If only 1 drawing, skip voting (auto-win)
   if (room.currentRoundDrawings.length === 1) {
+    console.log(`[${room.code}] Only 1 drawing, auto-win → round results`)
     room.currentRoundDrawings[0].votes.push('auto-win')
     advanceToRoundResults(room)
     return
