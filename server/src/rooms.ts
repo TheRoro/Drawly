@@ -228,7 +228,9 @@ export function getCurrentPrompt(room: Room): { prompt: string; authorId: string
 }
 
 export function getDrawersForRound(room: Room): string[] {
-  const authorId = room.playerOrder[room.currentRound]
+  // Use currentPromptAuthorId (kept in sync on reconnect) rather than
+  // playerOrder[currentRound] which can go stale after disconnections
+  const authorId = room.currentPromptAuthorId || room.playerOrder[room.currentRound]
   return [...room.players.entries()]
     .filter(([id, player]) => id !== authorId && player.connected)
     .map(([id]) => id)
