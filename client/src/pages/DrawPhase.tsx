@@ -18,6 +18,7 @@ export default function DrawPhase() {
   const [isDrawing, setIsDrawing] = useState(false)
   const [color, setColor] = useState('#1a1a1a')
   const [brushSize, setBrushSize] = useState(5)
+  const [isEraser, setIsEraser] = useState(false)
   const [submitted, setSubmitted] = useState(hasSubmittedDrawing)
   const lastPos = useRef<{ x: number; y: number } | null>(null)
   const submittedRef = useRef(hasSubmittedDrawing)
@@ -100,8 +101,8 @@ export default function DrawPhase() {
     const pos = getPos(e)
 
     ctx.beginPath()
-    ctx.strokeStyle = color
-    ctx.lineWidth = brushSize
+    ctx.strokeStyle = isEraser ? '#ffffff' : color
+    ctx.lineWidth = isEraser ? 20 : brushSize
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
     ctx.moveTo(lastPos.current.x, lastPos.current.y)
@@ -159,8 +160,8 @@ export default function DrawPhase() {
           ref={canvasRef}
           width={800}
           height={400}
-          className="rounded-xl cursor-crosshair w-full h-full touch-none select-none"
-          style={{ aspectRatio: '2/1' }}
+          className={`rounded-xl w-full h-full touch-none select-none ${isEraser ? '' : 'cursor-crosshair'}`}
+          style={{ aspectRatio: '2/1', cursor: isEraser ? 'url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2720%27 height=%2720%27%3E%3Ccircle cx=%2710%27 cy=%2710%27 r=%279%27 fill=%27none%27 stroke=%27%23666%27 stroke-width=%271.5%27/%3E%3C/svg%3E") 10 10, auto' : undefined }}
           onMouseDown={startDraw}
           onMouseMove={draw}
           onMouseUp={stopDraw}
@@ -178,10 +179,10 @@ export default function DrawPhase() {
             <button
               key={c}
               className={`w-9 h-9 sm:w-8 sm:h-8 rounded-full border-2 transition-transform touch-manipulation ${
-                color === c ? 'scale-125 border-ink-200' : 'border-paper-300'
+                color === c && !isEraser ? 'scale-125 border-ink-200' : 'border-paper-300'
               } ${c === '#ffffff' ? 'ring-1 ring-gray-200' : ''}`}
               style={{ backgroundColor: c }}
-              onClick={() => setColor(c)}
+              onClick={() => { setColor(c); setIsEraser(false) }}
             />
           ))}
         </div>
@@ -207,6 +208,13 @@ export default function DrawPhase() {
             </button>
           ))}
         </div>
+
+        <button
+          className={`btn text-sm px-4 py-2 ${isEraser ? 'ring-2 ring-blue-400 bg-blue-100 text-blue-700' : 'bg-paper-200 text-ink-100 hover:bg-paper-300'}`}
+          onClick={() => setIsEraser(!isEraser)}
+        >
+          🧽 Eraser
+        </button>
 
         <button className="btn text-sm bg-red-100 text-red-600 active:bg-red-200 px-4 py-2" onClick={clearCanvas}>
           🗑️ Clear
