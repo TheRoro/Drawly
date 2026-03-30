@@ -33,4 +33,5 @@ export interface Room {
   totalRounds: number // total prompts = number of players
   playerOrder: string[] // fixed order — determines whose prompt is used each round
   currentPromptAuthorId: string // whose prompt is being drawn this round
+  drawTime: number // seconds per drawing round
 }

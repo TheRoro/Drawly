@@ -86,7 +86,7 @@ interface GameContextType {
   sendReaction: (emoji: string) => void
   createRoom: (nickname: string, avatar: string) => void
   joinRoom: (code: string, nickname: string, avatar: string) => void
-  startGame: () => void
+  startGame: (drawTime?: number) => void
   submitPrompt: (prompt: string) => void
   submitDrawing: (imageData: string) => void
   submitVote: (drawingIndex: number) => void
@@ -352,8 +352,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     socket.emit('join-room', { code, nickname, avatar })
   }, [])
 
-  const startGame = useCallback(() => {
-    socket.emit('start-game')
+  const startGame = useCallback((drawTime?: number) => {
+    socket.emit('start-game', { drawTime: drawTime || 60 })
   }, [])
 
   const submitPrompt = useCallback((prompt: string) => {

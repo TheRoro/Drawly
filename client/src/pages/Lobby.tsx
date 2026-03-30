@@ -3,9 +3,12 @@ import { useGame } from '../context/GameContext'
 import { socket } from '../socket'
 import Chat from '../components/Chat'
 
+const DRAW_TIME_OPTIONS = [30, 60, 90, 120]
+
 export default function Lobby() {
   const { room, startGame, error } = useGame()
   const [copied, setCopied] = useState(false)
+  const [drawTime, setDrawTime] = useState(60)
 
   const isHost = room?.players.find(p => p.id === socket.id)?.isHost
 
@@ -65,13 +68,33 @@ export default function Lobby() {
         </div>
 
         {isHost ? (
-          <button
-            className="btn-green w-full"
-            onClick={startGame}
-            disabled={!room || room.players.length < 2}
-          >
-            {!room || room.players.length < 2 ? `Need 2+ players (${room?.players.length || 0} joined)` : '🚀 Start Game!'}
-          </button>
+          <>
+            <div className="mb-4">
+              <p className="text-ink-100 text-sm font-medium mb-2">⏱️ Draw Time</p>
+              <div className="flex gap-2 justify-center">
+                {DRAW_TIME_OPTIONS.map(t => (
+                  <button
+                    key={t}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      drawTime === t
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-paper-200 text-ink-100 hover:bg-paper-300'
+                    }`}
+                    onClick={() => setDrawTime(t)}
+                  >
+                    {t}s
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button
+              className="btn-green w-full"
+              onClick={() => startGame(drawTime)}
+              disabled={!room || room.players.length < 2}
+            >
+              {!room || room.players.length < 2 ? `Need 2+ players (${room?.players.length || 0} joined)` : '🚀 Start Game!'}
+            </button>
+          </>
         ) : (
           <p className="text-center text-ink-100 text-lg">
             Waiting for host to start...

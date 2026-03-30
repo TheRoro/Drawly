@@ -56,6 +56,7 @@ export function createRoom(hostId: string, nickname: string, avatar?: string): R
     totalRounds: 0,
     playerOrder: [],
     currentPromptAuthorId: '',
+    drawTime: 60,
   }
   const host: Player = {
     id: hostId,

@@ -60,7 +60,6 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: Date.now() })
 })
 
-const DRAW_TIME = 60 // seconds
 const PROMPT_TIME = 30 // seconds
 const VOTE_TIME = 30 // seconds
 const RESULTS_PAUSE = 8 // seconds between rounds
@@ -227,7 +226,7 @@ io.on('connection', (socket) => {
     })
   })
 
-  socket.on('start-game', () => {
+  socket.on('start-game', (data?: { drawTime?: number }) => {
     const room = getRoomByPlayerId(socket.id)
     if (!room) {
       socket.emit('error', { message: 'Room not found. Try refreshing.' })
@@ -242,6 +241,10 @@ io.on('connection', (socket) => {
       socket.emit('error', { message: 'Need at least 2 players to start' })
       return
     }
+
+    // Set custom draw time (clamp to valid range)
+    const requestedTime = data?.drawTime || 60
+    room.drawTime = Math.max(15, Math.min(180, requestedTime))
 
     // Set up: one round per player's prompt
     room.playerOrder = [...room.players.keys()]
@@ -512,7 +515,7 @@ function startDrawingRound(room: ReturnType<typeof getRoom>) {
   const authorNickname = room.players.get(authorId)?.nickname || 'Someone'
 
   room.phase = 'drawing'
-  room.timerEnd = Date.now() + DRAW_TIME * 1000
+  room.timerEnd = Date.now() + room.drawTime * 1000
 
   // Tell drawers to draw
   const drawers = getDrawersForRound(room)
@@ -560,7 +563,7 @@ function startDrawingRound(room: ReturnType<typeof getRoom>) {
     }
 
     advanceToVoting(room)
-  }, DRAW_TIME * 1000)
+  }, room.drawTime * 1000)
 
   // Request periodic snapshots for spy mode (every 2 seconds)
   // Re-compute drawers each tick so reconnected players get snapshot requests
