@@ -23,6 +23,53 @@ export default function DrawPhase() {
   const lastPos = useRef<{ x: number; y: number } | null>(null)
   const submittedRef = useRef(hasSubmittedDrawing)
 
+  // Stroke history for undo/redo
+  type Stroke = { points: { x: number; y: number }[]; color: string; size: number }
+  const strokesRef = useRef<Stroke[]>([])
+  const redoStackRef = useRef<Stroke[]>([])
+  const currentStrokeRef = useRef<Stroke | null>(null)
+  const [historyVersion, setHistoryVersion] = useState(0) // triggers re-render for button states
+  const canUndo = historyVersion >= 0 && strokesRef.current.length > 0
+  const canRedo = historyVersion >= 0 && redoStackRef.current.length > 0
+
+  const redrawCanvas = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')!
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+    for (const stroke of strokesRef.current) {
+      if (stroke.points.length < 2) continue
+      ctx.beginPath()
+      ctx.strokeStyle = stroke.color
+      ctx.lineWidth = stroke.size
+      ctx.lineCap = 'round'
+      ctx.lineJoin = 'round'
+      ctx.moveTo(stroke.points[0].x, stroke.points[0].y)
+      for (let i = 1; i < stroke.points.length; i++) {
+        ctx.lineTo(stroke.points[i].x, stroke.points[i].y)
+      }
+      ctx.stroke()
+    }
+  }, [])
+
+  const undo = useCallback(() => {
+    if (strokesRef.current.length === 0) return
+    const stroke = strokesRef.current.pop()!
+    redoStackRef.current.push(stroke)
+    redrawCanvas()
+    setHistoryVersion(v => v + 1)
+  }, [redrawCanvas])
+
+  const redo = useCallback(() => {
+    if (redoStackRef.current.length === 0) return
+    const stroke = redoStackRef.current.pop()!
+    strokesRef.current.push(stroke)
+    redrawCanvas()
+    setHistoryVersion(v => v + 1)
+  }, [redrawCanvas])
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -91,28 +138,41 @@ export default function DrawPhase() {
 
   const startDraw = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     setIsDrawing(true)
-    lastPos.current = getPos(e)
-  }, [getPos])
+    const pos = getPos(e)
+    lastPos.current = pos
+    currentStrokeRef.current = {
+      points: [pos],
+      color: isEraser ? '#ffffff' : color,
+      size: isEraser ? 20 : brushSize,
+    }
+  }, [getPos, isEraser, color, brushSize])
 
   const draw = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDrawing || !lastPos.current) return
+    if (!isDrawing || !lastPos.current || !currentStrokeRef.current) return
     const canvas = canvasRef.current!
     const ctx = canvas.getContext('2d')!
     const pos = getPos(e)
 
     ctx.beginPath()
-    ctx.strokeStyle = isEraser ? '#ffffff' : color
-    ctx.lineWidth = isEraser ? 20 : brushSize
+    ctx.strokeStyle = currentStrokeRef.current.color
+    ctx.lineWidth = currentStrokeRef.current.size
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
     ctx.moveTo(lastPos.current.x, lastPos.current.y)
     ctx.lineTo(pos.x, pos.y)
     ctx.stroke()
 
+    currentStrokeRef.current.points.push(pos)
     lastPos.current = pos
-  }, [isDrawing, color, brushSize, getPos])
+  }, [isDrawing, getPos])
 
   const stopDraw = useCallback(() => {
+    if (currentStrokeRef.current && currentStrokeRef.current.points.length >= 2) {
+      strokesRef.current.push(currentStrokeRef.current)
+      redoStackRef.current = [] // clear redo on new stroke
+      setHistoryVersion(v => v + 1)
+    }
+    currentStrokeRef.current = null
     setIsDrawing(false)
     lastPos.current = null
   }, [])
@@ -122,7 +182,26 @@ export default function DrawPhase() {
     const ctx = canvas.getContext('2d')!
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
+    strokesRef.current = []
+    redoStackRef.current = []
+    setHistoryVersion(v => v + 1)
   }
+
+  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (submitted) return
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        undo()
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault()
+        redo()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [submitted, undo, redo])
 
   const handleSubmit = () => {
     if (submittedRef.current) return
@@ -214,6 +293,24 @@ export default function DrawPhase() {
           onClick={() => setIsEraser(!isEraser)}
         >
           🧽 Eraser
+        </button>
+
+        <button
+          className="btn text-sm px-3 py-2 bg-paper-200 text-ink-100 hover:bg-paper-300 disabled:opacity-30 disabled:cursor-not-allowed"
+          onClick={undo}
+          disabled={!canUndo}
+          title="Undo (Ctrl+Z)"
+        >
+          ↩️
+        </button>
+
+        <button
+          className="btn text-sm px-3 py-2 bg-paper-200 text-ink-100 hover:bg-paper-300 disabled:opacity-30 disabled:cursor-not-allowed"
+          onClick={redo}
+          disabled={!canRedo}
+          title="Redo (Ctrl+Y)"
+        >
+          ↪️
         </button>
 
         <button className="btn text-sm bg-red-100 text-red-600 active:bg-red-200 px-4 py-2" onClick={clearCanvas}>
