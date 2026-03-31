@@ -6,7 +6,7 @@ import Chat from '../components/Chat'
 const DRAW_TIME_OPTIONS = [30, 60, 90, 120]
 
 export default function Lobby() {
-  const { room, startGame, error } = useGame()
+  const { room, startGame, kickPlayer, error } = useGame()
   const [copied, setCopied] = useState(false)
   const [drawTime, setDrawTime] = useState(60)
 
@@ -60,9 +60,17 @@ export default function Lobby() {
               </div>
               <span className="text-lg font-medium text-ink-200">{player.nickname}</span>
               {player.isHost && <span className="text-sm">👑</span>}
-              {player.id === socket.id && (
+              {player.id === socket.id ? (
                 <span className="ml-auto text-xs bg-blue-200 text-blue-700 px-2 py-1 rounded-full">You</span>
-              )}
+              ) : isHost ? (
+                <button
+                  onClick={() => kickPlayer(player.id)}
+                  className="ml-auto text-xs bg-red-100 hover:bg-red-200 text-red-600 px-2 py-1 rounded-full transition-colors"
+                  title={`Remove ${player.nickname}`}
+                >
+                  ✖ Kick
+                </button>
+              ) : null}
             </div>
           ))}
         </div>

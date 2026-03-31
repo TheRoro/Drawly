@@ -429,6 +429,39 @@ io.on('connection', (socket) => {
     }, PROMPT_TIME * 1000)
   })
 
+  socket.on('kick-player', ({ targetId }: { targetId: string }) => {
+    const room = getRoomByPlayerId(socket.id)
+    if (!room) return
+
+    if (room.phase !== 'lobby') {
+      socket.emit('error', { message: 'Players can only be removed from the lobby' })
+      return
+    }
+
+    const requester = room.players.get(socket.id)
+    if (!requester?.isHost) {
+      socket.emit('error', { message: 'Only the host can remove players' })
+      return
+    }
+
+    if (targetId === socket.id) return
+    if (!room.players.has(targetId)) return
+
+    // Notify the kicked player so their client clears state and returns home
+    io.to(targetId).emit('kicked')
+    const targetSocket = io.sockets.sockets.get(targetId)
+    if (targetSocket) targetSocket.leave(room.code)
+
+    const updatedRoom = removePlayer(targetId)
+    if (updatedRoom) {
+      io.to(updatedRoom.code).emit('room-update', {
+        players: getSerializablePlayers(updatedRoom),
+        phase: updatedRoom.phase,
+        code: updatedRoom.code,
+      })
+    }
+  })
+
   socket.on('disconnect', () => {
     console.log(`Player disconnected: ${socket.id}`)
     const room = getRoomByPlayerId(socket.id)

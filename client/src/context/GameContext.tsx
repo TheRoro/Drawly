@@ -84,6 +84,7 @@ interface GameContextType {
   reactions: Reaction[]
   sendChatMessage: (message: string) => void
   sendReaction: (emoji: string) => void
+  kickPlayer: (targetId: string) => void
   createRoom: (nickname: string, avatar: string) => void
   joinRoom: (code: string, nickname: string, avatar: string) => void
   startGame: (drawTime?: number) => void
@@ -314,6 +315,17 @@ export function GameProvider({ children }: { children: ReactNode }) {
       navigate('/')
     })
 
+    socket.on('kicked', () => {
+      roomCodeRef.current = ''
+      sessionStorage.removeItem('drawly-room')
+      sessionStorage.removeItem('drawly-nickname')
+      sessionStorage.removeItem('drawly-avatar')
+      setRoom(null)
+      setError('You were removed from the room by the host.')
+      setTimeout(() => setError(null), 4000)
+      navigate('/')
+    })
+
     return () => {
       socket.off('connect')
       socket.off('disconnect')
@@ -333,6 +345,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       socket.off('chat-message')
       socket.off('reaction')
       socket.off('room-expired')
+      socket.off('kicked')
     }
   }, [navigate])
 
@@ -350,6 +363,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
     sessionStorage.setItem('drawly-nickname', nickname)
     sessionStorage.setItem('drawly-avatar', avatar)
     socket.emit('join-room', { code, nickname, avatar })
+  }, [])
+
+  const kickPlayer = useCallback((targetId: string) => {
+    socket.emit('kick-player', { targetId })
   }, [])
 
   const startGame = useCallback((drawTime?: number) => {
@@ -400,6 +417,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       reactions,
       sendChatMessage,
       sendReaction,
+      kickPlayer,
       createRoom,
       joinRoom,
       startGame,
