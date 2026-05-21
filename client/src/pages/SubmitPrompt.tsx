@@ -1,17 +1,23 @@
 import { useState, FormEvent } from 'react'
 import { useGame } from '../context/GameContext'
 import Timer from '../components/Timer'
+import { getRandomPrompts } from '../data/promptSuggestions'
 
 export default function SubmitPrompt() {
   const { submitPrompt, timerEnd } = useGame()
   const [prompt, setPrompt] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [suggestions, setSuggestions] = useState<string[]>(() => getRandomPrompts(3))
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
     if (!prompt.trim()) return
     submitPrompt(prompt.trim())
     setSubmitted(true)
+  }
+
+  const shuffleSuggestions = () => {
+    setSuggestions(getRandomPrompts(3, [prompt.trim()]))
   }
 
   return (
@@ -40,6 +46,35 @@ export default function SubmitPrompt() {
             <button type="submit" className="btn-orange">
               Submit Prompt
             </button>
+
+            <div className="mt-2">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-ink-100 text-sm font-medium">💡 Need ideas? Tap one:</p>
+                <button
+                  type="button"
+                  onClick={shuffleSuggestions}
+                  className="text-xs px-2 py-1 bg-paper-200 hover:bg-paper-300 text-ink-100 rounded-full transition-colors"
+                >
+                  🎲 Shuffle
+                </button>
+              </div>
+              <div className="flex flex-col gap-2">
+                {suggestions.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setPrompt(s)}
+                    className={`text-left text-sm px-3 py-2 rounded-lg border transition-colors ${
+                      prompt === s
+                        ? 'bg-orange-100 border-orange-300 text-orange-700'
+                        : 'bg-paper-200 border-transparent text-ink-200 hover:bg-paper-300'
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
           </form>
         ) : (
           <div className="text-center animate-bounce-in">
