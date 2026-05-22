@@ -117,6 +117,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const nicknameRef = useRef<string>(sessionStorage.getItem('drawly-nickname') || '')
   const avatarRef = useRef<string>(sessionStorage.getItem('drawly-avatar') || '')
   const roomCodeRef = useRef<string>(sessionStorage.getItem('drawly-room') || '')
+  const reconnectTokenRef = useRef<string>(sessionStorage.getItem('drawly-reconnect-token') || '')
 
   useEffect(() => {
     if (!socket.connected) {
@@ -127,10 +128,25 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setError(null)
       const code = roomCodeRef.current
       const nickname = nicknameRef.current
+      const reconnectToken = reconnectTokenRef.current
       console.log('[Drawly] Socket connected, rejoin check:', { code, nickname, socketId: socket.id })
-      if (code && nickname) {
-        console.log('[Drawly] Emitting rejoin-room:', { code, nickname })
-        socket.emit('rejoin-room', { code, nickname, avatar: avatarRef.current })
+      if (code && nickname && reconnectToken) {
+        socket.emit('rejoin-room', {
+          code,
+          nickname,
+          avatar: avatarRef.current,
+          reconnectToken,
+        })
+      } else if (code || nickname || reconnectToken) {
+        roomCodeRef.current = ''
+        nicknameRef.current = ''
+        avatarRef.current = ''
+        reconnectTokenRef.current = ''
+        sessionStorage.removeItem('drawly-room')
+        sessionStorage.removeItem('drawly-nickname')
+        sessionStorage.removeItem('drawly-avatar')
+        sessionStorage.removeItem('drawly-reconnect-token')
+        navigate('/')
       }
     }
 
@@ -159,6 +175,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
       roomCodeRef.current = code
       sessionStorage.setItem('drawly-room', code)
       setRoom(prev => prev ? { ...prev, code } : { players: [], phase: 'lobby', code })
+    })
+
+    socket.on('session-token', ({ reconnectToken }: { reconnectToken: string }) => {
+      reconnectTokenRef.current = reconnectToken
+      sessionStorage.setItem('drawly-reconnect-token', reconnectToken)
     })
 
     socket.on('room-update', (data: RoomState) => {
@@ -312,6 +333,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       sessionStorage.removeItem('drawly-room')
       sessionStorage.removeItem('drawly-nickname')
       sessionStorage.removeItem('drawly-avatar')
+      sessionStorage.removeItem('drawly-reconnect-token')
+      reconnectTokenRef.current = ''
       navigate('/')
     })
 
@@ -320,6 +343,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       sessionStorage.removeItem('drawly-room')
       sessionStorage.removeItem('drawly-nickname')
       sessionStorage.removeItem('drawly-avatar')
+      sessionStorage.removeItem('drawly-reconnect-token')
+      reconnectTokenRef.current = ''
       setRoom(null)
       setError('You were removed from the room by the host.')
       setTimeout(() => setError(null), 4000)
@@ -331,6 +356,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       socket.off('disconnect')
       socket.off('connect_error')
       socket.off('room-created')
+      socket.off('session-token')
       socket.off('room-update')
       socket.off('game-phase')
       socket.off('drawing-state')
@@ -354,6 +380,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     avatarRef.current = avatar
     sessionStorage.setItem('drawly-nickname', nickname)
     sessionStorage.setItem('drawly-avatar', avatar)
+    reconnectTokenRef.current = ''
+    sessionStorage.removeItem('drawly-reconnect-token')
     socket.emit('create-room', { nickname, avatar })
   }, [])
 
@@ -362,6 +390,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     avatarRef.current = avatar
     sessionStorage.setItem('drawly-nickname', nickname)
     sessionStorage.setItem('drawly-avatar', avatar)
+    reconnectTokenRef.current = ''
+    sessionStorage.removeItem('drawly-reconnect-token')
     socket.emit('join-room', { code, nickname, avatar })
   }, [])
 

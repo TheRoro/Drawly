@@ -4,6 +4,7 @@ import { Server } from 'socket.io'
 import cors from 'cors'
 import {
   createRoom,
+  canCreateRoom,
   joinRoom,
   getRoom,
   getRoomByPlayerId,
@@ -17,6 +18,26 @@ import {
   resetForNewGame,
   getSerializablePlayers,
 } from './rooms.js'
+import {
+  FixedWindowRateLimiter,
+  MAX_DRAWING_BYTES,
+  MAX_ROOM_DRAWING_BYTES,
+  MAX_SNAPSHOT_BYTES,
+  asRecord,
+  getImageBytes,
+  parseAvatar,
+  parseChatMessage,
+  parseDrawingIndex,
+  parseDrawTime,
+  parseNickname,
+  parsePngDataUrl,
+  parsePrompt,
+  parseReaction,
+  parseReconnectToken,
+  parseRoomCode,
+  parseSocketId,
+  type RateLimit,
+} from './security.js'
 
 const app = express()
 const allowedOrigins = [
@@ -52,7 +73,7 @@ const io = new Server(httpServer, {
     allowedHeaders: ['Content-Type', 'Authorization'],
   },
   transports: ['websocket', 'polling'],
-  maxHttpBufferSize: 5e6, // 5MB for drawing data
+  maxHttpBufferSize: 1_500_000,
 })
 
 // Health check
@@ -63,21 +84,146 @@ app.get('/health', (_req, res) => {
 const PROMPT_TIME = 30 // seconds
 const VOTE_TIME = 30 // seconds
 const RESULTS_PAUSE = 8 // seconds between rounds
+const MAX_CONNECTIONS_PER_ADDRESS = 25
+const activeConnectionsByAddress = new Map<string, number>()
+const eventRateLimiter = new FixedWindowRateLimiter()
+const DEFAULT_SOCKET_RATE: RateLimit = { limit: 120, windowMs: 10_000 }
+const DEFAULT_ADDRESS_RATE: RateLimit = { limit: 600, windowMs: 10_000 }
+const EVENT_RATE_LIMITS: Record<string, { socket: RateLimit; address: RateLimit }> = {
+  'create-room': {
+    socket: { limit: 5, windowMs: 60_000 },
+    address: { limit: 20, windowMs: 60_000 },
+  },
+  'join-room': {
+    socket: { limit: 10, windowMs: 60_000 },
+    address: { limit: 60, windowMs: 60_000 },
+  },
+  'rejoin-room': {
+    socket: { limit: 10, windowMs: 60_000 },
+    address: { limit: 60, windowMs: 60_000 },
+  },
+  'chat-message': {
+    socket: { limit: 10, windowMs: 10_000 },
+    address: { limit: 100, windowMs: 10_000 },
+  },
+  reaction: {
+    socket: { limit: 8, windowMs: 10_000 },
+    address: { limit: 80, windowMs: 10_000 },
+  },
+  snapshot: {
+    socket: { limit: 8, windowMs: 10_000 },
+    address: { limit: 80, windowMs: 10_000 },
+  },
+  'submit-drawing': {
+    socket: { limit: 3, windowMs: 60_000 },
+    address: { limit: 30, windowMs: 60_000 },
+  },
+}
+const INBOUND_EVENTS = new Set([
+  'time-sync',
+  'create-room',
+  'join-room',
+  'rejoin-room',
+  'start-game',
+  'chat-message',
+  'reaction',
+  'submit-prompt',
+  'snapshot',
+  'submit-drawing',
+  'submit-vote',
+  'play-again',
+  'kick-player',
+])
+
+function getClientAddress(headers: Record<string, string | string[] | undefined>, fallback: string): string {
+  if (process.env.TRUST_PROXY !== 'true') return fallback
+  const forwarded = headers['x-forwarded-for']
+  const forwardedValue = Array.isArray(forwarded) ? forwarded[0] : forwarded
+  const address = forwardedValue?.split(',')[0]?.trim() || fallback
+  return address.slice(0, 64)
+}
+
+function getRoomDrawingBytes(room: NonNullable<ReturnType<typeof getRoom>>): number {
+  const drawingBytes = room.drawings.reduce((total, drawing) => total + getImageBytes(drawing.imageData), 0)
+  const snapshots: Map<string, string> | undefined = (room as any)._lastSnapshots
+  const snapshotBytes = snapshots
+    ? [...snapshots.values()].reduce((total, imageData) => total + getImageBytes(imageData), 0)
+    : 0
+  return drawingBytes + snapshotBytes
+}
+
+io.use((socket, next) => {
+  const address = getClientAddress(socket.handshake.headers, socket.handshake.address || 'unknown')
+  if ((activeConnectionsByAddress.get(address) || 0) >= MAX_CONNECTIONS_PER_ADDRESS) {
+    next(new Error('Too many active connections from this network'))
+    return
+  }
+  socket.data.address = address
+  next()
+})
 
 io.on('connection', (socket) => {
+  const address = typeof socket.data.address === 'string' ? socket.data.address : 'unknown'
+  activeConnectionsByAddress.set(address, (activeConnectionsByAddress.get(address) || 0) + 1)
   console.log(`Player connected: ${socket.id}`)
 
+  socket.use(([event], next) => {
+    if (!INBOUND_EVENTS.has(event)) {
+      const socketAllowed = eventRateLimiter.consume(
+        `socket:${socket.id}:unknown`,
+        { limit: 10, windowMs: 10_000 },
+      )
+      const addressAllowed = eventRateLimiter.consume(
+        `address:${address}:unknown`,
+        { limit: 50, windowMs: 10_000 },
+      )
+      if (socketAllowed && addressAllowed) {
+        socket.emit('error', { message: 'Unknown request' })
+      }
+      return
+    }
+
+    const limits = EVENT_RATE_LIMITS[event] || {
+      socket: DEFAULT_SOCKET_RATE,
+      address: DEFAULT_ADDRESS_RATE,
+    }
+    const socketAllowed = eventRateLimiter.consume(`socket:${socket.id}:${event}`, limits.socket)
+    const addressAllowed = eventRateLimiter.consume(`address:${address}:${event}`, limits.address)
+    if (!socketAllowed || !addressAllowed) {
+      socket.emit('error', { message: 'Too many requests. Please slow down.' })
+      return
+    }
+    next()
+  })
+
+  const rejectPayload = (message = 'Invalid request') => {
+    socket.emit('error', { message })
+  }
+
   // Time sync: client calculates clock offset to align timers
-  socket.on('time-sync', (_data: any, callback: (res: { serverTime: number }) => void) => {
+  socket.on('time-sync', (_data: unknown, callback: (res: { serverTime: number }) => void) => {
     if (typeof callback === 'function') {
       callback({ serverTime: Date.now() })
     }
   })
 
-  socket.on('create-room', ({ nickname, avatar }: { nickname: string; avatar: string }) => {
-    const room = createRoom(socket.id, nickname, avatar)
+  socket.on('create-room', (payload: unknown) => {
+    const data = asRecord(payload)
+    const nickname = parseNickname(data?.nickname)
+    const avatar = parseAvatar(data?.avatar)
+    if (!nickname || avatar === null) {
+      rejectPayload('Nickname or avatar is invalid')
+      return
+    }
+    if (!canCreateRoom(address)) {
+      rejectPayload('Room capacity reached. Please try again later.')
+      return
+    }
+
+    const { room, reconnectToken } = createRoom(socket.id, nickname, address, avatar)
     socket.join(room.code)
     socket.emit('room-created', { code: room.code })
+    socket.emit('session-token', { reconnectToken })
     socket.emit('room-update', {
       players: getSerializablePlayers(room),
       phase: room.phase,
@@ -85,13 +231,24 @@ io.on('connection', (socket) => {
     })
   })
 
-  socket.on('join-room', ({ code, nickname, avatar }: { code: string; nickname: string; avatar: string }) => {
-    const room = joinRoom(code, socket.id, nickname, avatar)
-    if (!room) {
-      socket.emit('error', { message: 'Room not found, full, or game already started' })
+  socket.on('join-room', (payload: unknown) => {
+    const data = asRecord(payload)
+    const code = parseRoomCode(data?.code)
+    const nickname = parseNickname(data?.nickname)
+    const avatar = parseAvatar(data?.avatar)
+    if (!code || !nickname || avatar === null) {
+      rejectPayload('Room code, nickname, or avatar is invalid')
       return
     }
+
+    const result = joinRoom(code, socket.id, nickname, avatar)
+    if (!result) {
+      socket.emit('error', { message: 'Room not found, full, nickname taken, or game already started' })
+      return
+    }
+    const { room, reconnectToken } = result
     socket.join(room.code)
+    socket.emit('session-token', { reconnectToken })
     io.to(room.code).emit('room-update', {
       players: getSerializablePlayers(room),
       phase: room.phase,
@@ -99,7 +256,15 @@ io.on('connection', (socket) => {
     })
   })
 
-  socket.on('rejoin-room', ({ code, nickname, avatar }: { code: string; nickname: string; avatar: string }) => {
+  socket.on('rejoin-room', (payload: unknown) => {
+    const data = asRecord(payload)
+    const code = parseRoomCode(data?.code)
+    const reconnectToken = parseReconnectToken(data?.reconnectToken)
+    if (!code || !reconnectToken) {
+      rejectPayload('Session is invalid. Please join the room again.')
+      return
+    }
+
     const room = getRoom(code)
     if (!room) {
       socket.emit('error', { message: 'Room expired. Please create a new room.' })
@@ -107,9 +272,11 @@ io.on('connection', (socket) => {
       return
     }
 
-    const reconnectedRoom = reconnectPlayer(code, nickname, socket.id)
-    if (reconnectedRoom) {
+    const reconnectResult = reconnectPlayer(code, reconnectToken, socket.id)
+    if (reconnectResult) {
+      const { room: reconnectedRoom, reconnectToken: rotatedReconnectToken } = reconnectResult
       socket.join(reconnectedRoom.code)
+      socket.emit('session-token', { reconnectToken: rotatedReconnectToken })
       io.to(reconnectedRoom.code).emit('room-update', {
         players: getSerializablePlayers(reconnectedRoom),
         phase: reconnectedRoom.phase,
@@ -211,22 +378,18 @@ io.on('connection', (socket) => {
       return
     }
 
-    if (!room.players.has(socket.id)) {
-      const result = joinRoom(code, socket.id, nickname, avatar)
-      if (!result) {
-        socket.emit('error', { message: 'Game already in progress' })
-        return
-      }
-    }
-    socket.join(room.code)
-    io.to(room.code).emit('room-update', {
-      players: getSerializablePlayers(room),
-      phase: room.phase,
-      code: room.code,
-    })
+    socket.emit('error', { message: 'Session expired. Please join the room again.' })
+    socket.emit('room-expired')
   })
 
-  socket.on('start-game', (data?: { drawTime?: number }) => {
+  socket.on('start-game', (payload: unknown) => {
+    const data = asRecord(payload)
+    const drawTime = parseDrawTime(data?.drawTime)
+    if (drawTime === null) {
+      rejectPayload('Drawing time must be a whole number from 15 to 180 seconds')
+      return
+    }
+
     const room = getRoomByPlayerId(socket.id)
     if (!room) {
       socket.emit('error', { message: 'Room not found. Try refreshing.' })
@@ -243,8 +406,7 @@ io.on('connection', (socket) => {
     }
 
     // Set custom draw time (clamp to valid range)
-    const requestedTime = data?.drawTime || 60
-    room.drawTime = Math.max(15, Math.min(180, requestedTime))
+    room.drawTime = drawTime
 
     // Set up: one round per player's prompt
     room.playerOrder = [...room.players.keys()]
@@ -263,13 +425,17 @@ io.on('connection', (socket) => {
     }, PROMPT_TIME * 1000)
   })
 
-  socket.on('chat-message', ({ message }: { message: string }) => {
+  socket.on('chat-message', (payload: unknown) => {
+    const data = asRecord(payload)
+    const text = parseChatMessage(data?.message)
+    if (!text) {
+      rejectPayload('Chat message is invalid')
+      return
+    }
     const room = getRoomByPlayerId(socket.id)
     if (!room) return
     const player = room.players.get(socket.id)
     if (!player) return
-    const text = message.trim().slice(0, 200)
-    if (!text) return
     io.to(room.code).emit('chat-message', {
       id: `${socket.id}-${Date.now()}`,
       playerId: socket.id,
@@ -281,7 +447,13 @@ io.on('connection', (socket) => {
     })
   })
 
-  socket.on('reaction', ({ emoji }: { emoji: string }) => {
+  socket.on('reaction', (payload: unknown) => {
+    const data = asRecord(payload)
+    const emoji = parseReaction(data?.emoji)
+    if (!emoji) {
+      rejectPayload('Reaction is invalid')
+      return
+    }
     const room = getRoomByPlayerId(socket.id)
     if (!room) return
     const player = room.players.get(socket.id)
@@ -295,10 +467,16 @@ io.on('connection', (socket) => {
     })
   })
 
-  socket.on('submit-prompt', ({ prompt }: { prompt: string }) => {
+  socket.on('submit-prompt', (payload: unknown) => {
+    const data = asRecord(payload)
+    const prompt = parsePrompt(data?.prompt)
+    if (!prompt) {
+      rejectPayload('Prompt must be between 1 and 120 characters')
+      return
+    }
     const room = getRoomByPlayerId(socket.id)
     if (!room || room.phase !== 'prompts') return
-    room.prompts.set(socket.id, prompt.trim())
+    room.prompts.set(socket.id, prompt)
 
     if (room.prompts.size === room.players.size) {
       if (room.roundTimer) clearTimeout(room.roundTimer)
@@ -306,7 +484,13 @@ io.on('connection', (socket) => {
     }
   })
 
-  socket.on('snapshot', ({ imageData }: { imageData: string }) => {
+  socket.on('snapshot', (payload: unknown) => {
+    const data = asRecord(payload)
+    const imageData = parsePngDataUrl(data?.imageData, MAX_SNAPSHOT_BYTES)
+    if (!imageData) {
+      rejectPayload('Drawing snapshot is invalid or too large')
+      return
+    }
     const room = getRoomByPlayerId(socket.id)
     if (!room || room.phase !== 'drawing') return
     if (socket.id === room.currentPromptAuthorId) return
@@ -314,6 +498,15 @@ io.on('connection', (socket) => {
 
     // Store last snapshot for auto-submit on timeout
     const lastSnapshots: Map<string, string> = (room as any)._lastSnapshots || new Map()
+    const previousSnapshot = lastSnapshots.get(socket.id)
+    const projectedBytes =
+      getRoomDrawingBytes(room) -
+      (previousSnapshot ? getImageBytes(previousSnapshot) : 0) +
+      getImageBytes(imageData)
+    if (projectedBytes > MAX_ROOM_DRAWING_BYTES) {
+      rejectPayload('Room drawing storage limit reached')
+      return
+    }
     lastSnapshots.set(socket.id, imageData)
     ;(room as any)._lastSnapshots = lastSnapshots
 
@@ -325,7 +518,13 @@ io.on('connection', (socket) => {
     })
   })
 
-  socket.on('submit-drawing', ({ imageData }: { imageData: string }) => {
+  socket.on('submit-drawing', (payload: unknown) => {
+    const data = asRecord(payload)
+    const imageData = parsePngDataUrl(data?.imageData, MAX_DRAWING_BYTES)
+    if (!imageData) {
+      rejectPayload('Drawing is invalid or too large')
+      return
+    }
     const room = getRoomByPlayerId(socket.id)
     if (!room || room.phase !== 'drawing') {
       console.log(`[submit-drawing] Rejected: no room or phase=${room?.phase} for ${socket.id}`)
@@ -337,6 +536,10 @@ io.on('connection', (socket) => {
 
     // Only drawers can submit (not the prompt author)
     if (socket.id === room.currentPromptAuthorId) return
+    if (getRoomDrawingBytes(room) + getImageBytes(imageData) > MAX_ROOM_DRAWING_BYTES) {
+      rejectPayload('Room drawing storage limit reached')
+      return
+    }
 
     const { prompt } = getCurrentPrompt(room)
     const player = room.players.get(socket.id)
@@ -377,7 +580,13 @@ io.on('connection', (socket) => {
     }
   })
 
-  socket.on('submit-vote', ({ drawingIndex }: { drawingIndex: number }) => {
+  socket.on('submit-vote', (payload: unknown) => {
+    const data = asRecord(payload)
+    const drawingIndex = parseDrawingIndex(data?.drawingIndex)
+    if (drawingIndex === null) {
+      rejectPayload('Vote is invalid')
+      return
+    }
     const room = getRoomByPlayerId(socket.id)
     if (!room || room.phase !== 'voting') return
     if (drawingIndex < 0 || drawingIndex >= room.currentRoundDrawings.length) return
@@ -429,7 +638,13 @@ io.on('connection', (socket) => {
     }, PROMPT_TIME * 1000)
   })
 
-  socket.on('kick-player', ({ targetId }: { targetId: string }) => {
+  socket.on('kick-player', (payload: unknown) => {
+    const data = asRecord(payload)
+    const targetId = parseSocketId(data?.targetId)
+    if (!targetId) {
+      rejectPayload('Player is invalid')
+      return
+    }
     const room = getRoomByPlayerId(socket.id)
     if (!room) return
 
@@ -463,21 +678,14 @@ io.on('connection', (socket) => {
   })
 
   socket.on('disconnect', () => {
+    const remainingConnections = Math.max(0, (activeConnectionsByAddress.get(address) || 1) - 1)
+    if (remainingConnections === 0) activeConnectionsByAddress.delete(address)
+    else activeConnectionsByAddress.set(address, remainingConnections)
+    eventRateLimiter.clearPrefix(`socket:${socket.id}:`)
+
     console.log(`Player disconnected: ${socket.id}`)
     const room = getRoomByPlayerId(socket.id)
     if (!room) return
-
-    if (room.phase === 'lobby') {
-      const updatedRoom = removePlayer(socket.id)
-      if (updatedRoom) {
-        io.to(updatedRoom.code).emit('room-update', {
-          players: getSerializablePlayers(updatedRoom),
-          phase: updatedRoom.phase,
-          code: updatedRoom.code,
-        })
-      }
-      return
-    }
 
     const disconnectedRoom = markDisconnected(socket.id, () => {
       const updatedRoom = removePlayer(socket.id)

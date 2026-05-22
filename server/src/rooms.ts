@@ -1,8 +1,13 @@
-import { Room, Player, GamePhase, Drawing } from './types.js'
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+import { Room, Player, Drawing } from './types.js'
 
 const rooms = new Map<string, Room>()
 const disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const DISCONNECT_GRACE_MS = 15_000
+const PREVIOUS_TOKEN_GRACE_MS = 120_000
+const MAX_PREVIOUS_TOKENS = 3
+const MAX_ACTIVE_ROOMS = 500
+const MAX_ACTIVE_ROOMS_PER_ADDRESS = 10
 
 const PLAYER_COLORS = [
   '#ef4444', // red
@@ -24,7 +29,7 @@ function getRandomAvatar(): string {
 }
 
 function normalizeAvatar(avatar?: string): string {
-  return avatar?.trim() || getRandomAvatar()
+  return avatar || getRandomAvatar()
 }
 
 function getNextColor(room: Room): string {
@@ -41,10 +46,59 @@ function generateCode(): string {
   return rooms.has(code) ? generateCode() : code
 }
 
-export function createRoom(hostId: string, nickname: string, avatar?: string): Room {
+function hashReconnectToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex')
+}
+
+function issueReconnectToken(player: Player): string {
+  const token = randomBytes(32).toString('hex')
+  const now = Date.now()
+  player.previousReconnectTokenHashes = player.previousReconnectTokenHashes
+    .filter(entry => entry.expiresAt > now)
+    .slice(0, MAX_PREVIOUS_TOKENS - 1)
+  if (player.reconnectTokenHash) {
+    player.previousReconnectTokenHashes.unshift({
+      hash: player.reconnectTokenHash,
+      expiresAt: now + PREVIOUS_TOKEN_GRACE_MS,
+    })
+  }
+  player.reconnectTokenHash = hashReconnectToken(token)
+  return token
+}
+
+function reconnectTokenMatches(player: Player, token: string): boolean {
+  const suppliedHash = Buffer.from(hashReconnectToken(token), 'hex')
+  const now = Date.now()
+  player.previousReconnectTokenHashes = player.previousReconnectTokenHashes.filter(entry => entry.expiresAt > now)
+  const acceptedHashes = [
+    player.reconnectTokenHash,
+    ...player.previousReconnectTokenHashes.map(entry => entry.hash),
+  ]
+  return acceptedHashes.some(hash => {
+    const storedHash = Buffer.from(hash, 'hex')
+    return suppliedHash.length === storedHash.length && timingSafeEqual(suppliedHash, storedHash)
+  })
+}
+
+export function canCreateRoom(creatorAddress: string): boolean {
+  if (rooms.size >= MAX_ACTIVE_ROOMS) return false
+  let roomsForAddress = 0
+  for (const room of rooms.values()) {
+    if (room.creatorAddress === creatorAddress) roomsForAddress++
+  }
+  return roomsForAddress < MAX_ACTIVE_ROOMS_PER_ADDRESS
+}
+
+export function createRoom(
+  hostId: string,
+  nickname: string,
+  creatorAddress: string,
+  avatar?: string,
+): { room: Room; reconnectToken: string } {
   const code = generateCode()
   const room: Room = {
     code,
+    creatorAddress,
     players: new Map(),
     phase: 'lobby',
     prompts: new Map(),
@@ -62,33 +116,45 @@ export function createRoom(hostId: string, nickname: string, avatar?: string): R
     id: hostId,
     nickname,
     avatar: normalizeAvatar(avatar),
+    reconnectTokenHash: '',
+    previousReconnectTokenHashes: [],
     isHost: true,
     score: 0,
     connected: true,
     color: getNextColor(room),
   }
+  const reconnectToken = issueReconnectToken(host)
   room.players.set(hostId, host)
   rooms.set(code, room)
-  return room
+  return { room, reconnectToken }
 }
 
-export function joinRoom(code: string, playerId: string, nickname: string, avatar?: string): Room | null {
+export function joinRoom(
+  code: string,
+  playerId: string,
+  nickname: string,
+  avatar?: string,
+): { room: Room; reconnectToken: string } | null {
   const room = rooms.get(code.toUpperCase())
   if (!room) return null
   if (room.phase !== 'lobby') return null
   if (room.players.size >= 10) return null
+  if ([...room.players.values()].some(player => player.nickname.toLowerCase() === nickname.toLowerCase())) return null
 
   const player: Player = {
     id: playerId,
     nickname,
     avatar: normalizeAvatar(avatar),
+    reconnectTokenHash: '',
+    previousReconnectTokenHashes: [],
     isHost: false,
     score: 0,
     connected: true,
     color: getNextColor(room),
   }
+  const reconnectToken = issueReconnectToken(player)
   room.players.set(playerId, player)
-  return room
+  return { room, reconnectToken }
 }
 
 export function getRoom(code: string): Room | undefined {
@@ -151,13 +217,16 @@ export function markDisconnected(playerId: string, onExpire?: () => void): Room 
   return room
 }
 
-export function reconnectPlayer(code: string, oldNickname: string, newSocketId: string): Room | null {
+export function reconnectPlayer(
+  code: string,
+  reconnectToken: string,
+  newSocketId: string,
+): { room: Room; reconnectToken: string } | null {
   const room = rooms.get(code.toUpperCase())
   if (!room) return null
 
-  const normalizedNickname = oldNickname.trim().toLowerCase()
   const disconnectedEntry = [...room.players.entries()].find(([, player]) => {
-    return !player.connected && player.nickname.trim().toLowerCase() === normalizedNickname
+    return !player.connected && reconnectTokenMatches(player, reconnectToken)
   })
 
   if (!disconnectedEntry) return null
@@ -172,6 +241,7 @@ export function reconnectPlayer(code: string, oldNickname: string, newSocketId: 
   room.players.delete(oldSocketId)
   player.id = newSocketId
   player.connected = true
+  const rotatedReconnectToken = issueReconnectToken(player)
   room.players.set(newSocketId, player)
 
   room.playerOrder = room.playerOrder.map(id => id === oldSocketId ? newSocketId : id)
@@ -212,7 +282,7 @@ export function reconnectPlayer(code: string, oldNickname: string, newSocketId: 
     if (snapshot !== undefined) lastSnapshots.set(newSocketId, snapshot)
   }
 
-  return room
+  return { room, reconnectToken: rotatedReconnectToken }
 }
 
 export function getCurrentPrompt(room: Room): { prompt: string; authorId: string } {
@@ -279,6 +349,12 @@ export function resetForNewGame(room: Room): void {
   }
 }
 
-export function getSerializablePlayers(room: Room): Player[] {
-  return [...room.players.values()]
+export function getSerializablePlayers(
+  room: Room,
+): Omit<Player, 'reconnectTokenHash' | 'previousReconnectTokenHashes'>[] {
+  return [...room.players.values()].map(({
+    reconnectTokenHash: _reconnectTokenHash,
+    previousReconnectTokenHashes: _previousReconnectTokenHashes,
+    ...player
+  }) => player)
 }

@@ -42,6 +42,8 @@ cd client && npm run dev
   - Build command: `npm install && npm run build`
   - Start command: `npm start`
   - Set `CLIENT_URL` env var to your Vercel domain
+  - Set `TRUST_PROXY=true` only when Render or another trusted reverse proxy
+    overwrites `X-Forwarded-For`; leave it unset for direct deployments
 
 ## Features
 

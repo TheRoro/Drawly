@@ -4,6 +4,8 @@ export interface Player {
   id: string
   nickname: string
   avatar: string
+  reconnectTokenHash: string
+  previousReconnectTokenHashes: { hash: string; expiresAt: number }[]
   isHost: boolean
   score: number
   connected: boolean
@@ -22,6 +24,7 @@ export interface Drawing {
 
 export interface Room {
   code: string
+  creatorAddress: string
   players: Map<string, Player>
   phase: GamePhase
   prompts: Map<string, string> // playerId → prompt text
