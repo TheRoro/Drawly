@@ -120,6 +120,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const reconnectTokenRef = useRef<string>(sessionStorage.getItem('drawly-reconnect-token') || '')
 
   useEffect(() => {
+    type SocketListener = (...args: any[]) => void
+    const listeners: { event: string; listener: SocketListener }[] = []
+    const on = (event: string, listener: SocketListener) => {
+      socket.on(event, listener)
+      listeners.push({ event, listener })
+    }
+
     if (!socket.connected) {
       socket.connect()
     }
@@ -150,14 +157,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    socket.on('connect', handleConnect)
+    on('connect', handleConnect)
 
     // If socket already connected (e.g. StrictMode remount), rejoin immediately
     if (socket.connected) {
       handleConnect()
     }
 
-    socket.on('disconnect', (reason) => {
+    on('disconnect', (reason) => {
       if (reason === 'io server disconnect') {
         setError('Disconnected by server')
       } else {
@@ -165,30 +172,30 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
     })
 
-    socket.on('connect_error', (err: Error & { description?: unknown }) => {
+    on('connect_error', (err: Error & { description?: unknown }) => {
       const detail = typeof err.message === 'string' && err.message ? err.message : 'Unknown connection error'
       setError(`Can't connect to the game server (${detail}). Try mobile data or a different network.`)
       setTimeout(() => setError(null), 5000)
     })
 
-    socket.on('room-created', ({ code }: { code: string }) => {
+    on('room-created', ({ code }: { code: string }) => {
       roomCodeRef.current = code
       sessionStorage.setItem('drawly-room', code)
       setRoom(prev => prev ? { ...prev, code } : { players: [], phase: 'lobby', code })
     })
 
-    socket.on('session-token', ({ reconnectToken }: { reconnectToken: string }) => {
+    on('session-token', ({ reconnectToken }: { reconnectToken: string }) => {
       reconnectTokenRef.current = reconnectToken
       sessionStorage.setItem('drawly-reconnect-token', reconnectToken)
     })
 
-    socket.on('room-update', (data: RoomState) => {
+    on('room-update', (data: RoomState) => {
       roomCodeRef.current = data.code
       sessionStorage.setItem('drawly-room', data.code)
       setRoom(data)
     })
 
-    socket.on('game-phase', ({ phase, timerEnd: te, currentRound: cr, totalRounds: tr, promptAuthorId }: { phase: string; timerEnd?: number; currentRound?: number; totalRounds?: number; promptAuthorId?: string }) => {
+    on('game-phase', ({ phase, timerEnd: te, currentRound: cr, totalRounds: tr, promptAuthorId }: { phase: string; timerEnd?: number; currentRound?: number; totalRounds?: number; promptAuthorId?: string }) => {
       setRoom(prev => prev ? { ...prev, phase } : null)
       setTimerEnd(te ? toLocalTime(te) : null)
       if (cr !== undefined) setDrawingRound(cr)
@@ -224,7 +231,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     })
 
     // Complete state restore for drawing phase rejoin
-    socket.on('drawing-state', (data: {
+    on('drawing-state', (data: {
       phase: string
       role: 'drawer' | 'prompt-author'
       prompt: string
@@ -259,12 +266,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
     })
 
-    socket.on('waiting-round', ({ message }: { message: string }) => {
+    on('waiting-round', ({ message }: { message: string }) => {
       setWaitingMessage(message)
       setSpyDrawings([])
     })
 
-    socket.on('spy-drawing', (data: SpyDrawing & { playerId?: string }) => {
+    on('spy-drawing', (data: SpyDrawing & { playerId?: string }) => {
       setSpyDrawings(prev => {
         // Replace existing snapshot entry for this player with submitted version
         if (data.playerId) {
@@ -281,7 +288,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       })
     })
 
-    socket.on('spy-snapshot', ({ playerId, playerNickname, imageData }: { playerId: string; playerNickname: string; imageData: string }) => {
+    on('spy-snapshot', ({ playerId, playerNickname, imageData }: { playerId: string; playerNickname: string; imageData: string }) => {
       setSpyDrawings(prev => {
         const existing = prev.findIndex(s => (s as any).playerId === playerId && !(s as any).submitted)
         const entry = { playerId, playerNickname, imageData, count: 0, total: 0, submitted: false } as any
@@ -294,41 +301,41 @@ export function GameProvider({ children }: { children: ReactNode }) {
       })
     })
 
-    socket.on('assign-prompt', ({ prompt }: { prompt: string }) => {
+    on('assign-prompt', ({ prompt }: { prompt: string }) => {
       setAssignedPrompt(prompt)
     })
 
-    socket.on('drawings', ({ drawings: d }: { drawings: DrawingEntry[] }) => {
+    on('drawings', ({ drawings: d }: { drawings: DrawingEntry[] }) => {
       setDrawings(d)
     })
 
-    socket.on('round-results', ({ drawings: d, leaderboard: l, currentRound: cr, totalRounds: tr }: { drawings: ResultEntry[]; leaderboard: LeaderboardEntry[]; currentRound: number; totalRounds: number }) => {
+    on('round-results', ({ drawings: d, leaderboard: l, currentRound: cr, totalRounds: tr }: { drawings: ResultEntry[]; leaderboard: LeaderboardEntry[]; currentRound: number; totalRounds: number }) => {
       setRoundResults({ drawings: d, leaderboard: l })
       setDrawingRound(cr)
       setTotalRounds(tr)
       navigate('/round-results')
     })
 
-    socket.on('results', ({ drawings: d, leaderboard: l }: { drawings: ResultEntry[]; leaderboard: LeaderboardEntry[] }) => {
+    on('results', ({ drawings: d, leaderboard: l }: { drawings: ResultEntry[]; leaderboard: LeaderboardEntry[] }) => {
       setResults(d)
       setLeaderboard(l)
       navigate('/results')
     })
 
-    socket.on('error', ({ message }: { message: string }) => {
+    on('error', ({ message }: { message: string }) => {
       setError(message)
       setTimeout(() => setError(null), 3000)
     })
 
-    socket.on('chat-message', (msg: ChatMessage) => {
+    on('chat-message', (msg: ChatMessage) => {
       setChatMessages(prev => [...prev.slice(-99), msg])
     })
 
-    socket.on('reaction', (reaction: Reaction) => {
+    on('reaction', (reaction: Reaction) => {
       setReactions(prev => [...prev.slice(-49), reaction])
     })
 
-    socket.on('room-expired', () => {
+    on('room-expired', () => {
       setRoom(null)
       sessionStorage.removeItem('drawly-room')
       sessionStorage.removeItem('drawly-nickname')
@@ -338,7 +345,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       navigate('/')
     })
 
-    socket.on('kicked', () => {
+    on('kicked', () => {
       roomCodeRef.current = ''
       sessionStorage.removeItem('drawly-room')
       sessionStorage.removeItem('drawly-nickname')
@@ -352,26 +359,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
     })
 
     return () => {
-      socket.off('connect')
-      socket.off('disconnect')
-      socket.off('connect_error')
-      socket.off('room-created')
-      socket.off('session-token')
-      socket.off('room-update')
-      socket.off('game-phase')
-      socket.off('drawing-state')
-      socket.off('assign-prompt')
-      socket.off('waiting-round')
-      socket.off('spy-drawing')
-      socket.off('spy-snapshot')
-      socket.off('drawings')
-      socket.off('round-results')
-      socket.off('results')
-      socket.off('error')
-      socket.off('chat-message')
-      socket.off('reaction')
-      socket.off('room-expired')
-      socket.off('kicked')
+      listeners.forEach(({ event, listener }) => {
+        socket.off(event, listener)
+      })
     }
   }, [navigate])
 
