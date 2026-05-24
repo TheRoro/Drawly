@@ -307,6 +307,11 @@ export function getDrawersForRound(room: Room): string[] {
     .map(([id]) => id)
 }
 
+export function haveAllDrawersSubmitted(room: Room): boolean {
+  const submittedIds = new Set(room.currentRoundDrawings.map(drawing => drawing.playerId))
+  return getDrawersForRound(room).every(playerId => submittedIds.has(playerId))
+}
+
 export function calculateRoundResults(room: Room): Drawing[] {
   const sorted = [...room.currentRoundDrawings].sort((a, b) => b.votes.length - a.votes.length)
 

@@ -13,6 +13,7 @@ import {
   reconnectPlayer,
   getCurrentPrompt,
   getDrawersForRound,
+  haveAllDrawersSubmitted,
   calculateRoundResults,
   hasMoreRounds,
   resetForNewGame,
@@ -559,8 +560,10 @@ io.on('connection', (socket) => {
 
     // If all drawers submitted, advance early
     const drawers = getDrawersForRound(room)
+    const submittedIds = new Set(room.currentRoundDrawings.map(d => d.playerId))
+    const submittedDrawerCount = drawers.filter(playerId => submittedIds.has(playerId)).length
 
-    console.log(`[${room.code}] Drawing submitted by ${player?.nickname || socket.id} (${room.currentRoundDrawings.length}/${drawers.length} drawers)`)
+    console.log(`[${room.code}] Drawing submitted by ${player?.nickname || socket.id} (${submittedDrawerCount}/${drawers.length} drawers)`)
 
     // Notify prompt author that a drawing was submitted (spy mode)
     if (room.currentPromptAuthorId) {
@@ -568,12 +571,12 @@ io.on('connection', (socket) => {
         playerId: socket.id,
         imageData: drawing.imageData,
         playerNickname: drawing.playerNickname,
-        count: room.currentRoundDrawings.length,
+        count: submittedDrawerCount,
         total: drawers.length,
       })
     }
 
-    if (room.currentRoundDrawings.length >= drawers.length) {
+    if (haveAllDrawersSubmitted(room)) {
       console.log(`[${room.code}] All drawers submitted, advancing to voting`)
       if (room.roundTimer) clearTimeout(room.roundTimer)
       advanceToVoting(room)
@@ -699,7 +702,7 @@ io.on('connection', (socket) => {
         // If the disconnected player was a drawer and all remaining drawers have submitted, advance
         if (updatedRoom.phase === 'drawing') {
           const drawers = getDrawersForRound(updatedRoom)
-          if (drawers.length > 0 && updatedRoom.currentRoundDrawings.length >= drawers.length) {
+          if (drawers.length > 0 && haveAllDrawersSubmitted(updatedRoom)) {
             console.log(`[${updatedRoom.code}] All remaining drawers submitted after player removal, advancing`)
             if (updatedRoom.roundTimer) clearTimeout(updatedRoom.roundTimer)
             advanceToVoting(updatedRoom)
@@ -722,7 +725,7 @@ io.on('connection', (socket) => {
       // Check if disconnect means all remaining drawers have submitted (player marked disconnected reduces drawer count)
       if (disconnectedRoom.phase === 'drawing' && socket.id !== disconnectedRoom.currentPromptAuthorId) {
         const drawers = getDrawersForRound(disconnectedRoom)
-        if (drawers.length > 0 && disconnectedRoom.currentRoundDrawings.length >= drawers.length) {
+        if (drawers.length > 0 && haveAllDrawersSubmitted(disconnectedRoom)) {
           console.log(`[${disconnectedRoom.code}] All connected drawers submitted after disconnect, advancing`)
           if (disconnectedRoom.roundTimer) clearTimeout(disconnectedRoom.roundTimer)
           advanceToVoting(disconnectedRoom)
