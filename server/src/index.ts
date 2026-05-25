@@ -1,5 +1,6 @@
 import express from 'express'
 import { createServer } from 'http'
+import { pathToFileURL } from 'node:url'
 import { Server } from 'socket.io'
 import cors from 'cors'
 import {
@@ -18,6 +19,7 @@ import {
   hasMoreRounds,
   resetForNewGame,
   getSerializablePlayers,
+  clearAllRooms,
 } from './rooms.js'
 import {
   FixedWindowRateLimiter,
@@ -40,7 +42,7 @@ import {
   type RateLimit,
 } from './security.js'
 
-const app = express()
+export const app = express()
 const allowedOrigins = [
   'https://drawly.vercel.app',
   'http://localhost:5173',
@@ -65,8 +67,8 @@ const corsOptions = {
 app.use(cors(corsOptions))
 app.use(express.json())
 
-const httpServer = createServer(app)
-const io = new Server(httpServer, {
+export const httpServer = createServer(app)
+export const io = new Server(httpServer, {
   cors: {
     origin: allowedOrigins,
     methods: ['GET', 'POST'],
@@ -84,7 +86,13 @@ app.get('/health', (_req, res) => {
 
 const PROMPT_TIME = 30 // seconds
 const VOTE_TIME = 30 // seconds
-const RESULTS_PAUSE = 8 // seconds between rounds
+const configuredResultsPause = Number(process.env.DRAWLY_RESULTS_PAUSE_MS)
+const RESULTS_PAUSE_MS =
+  Number.isFinite(configuredResultsPause) &&
+  configuredResultsPause >= 10 &&
+  configuredResultsPause <= 60_000
+    ? configuredResultsPause
+    : 8_000
 const MAX_CONNECTIONS_PER_ADDRESS = 25
 const activeConnectionsByAddress = new Map<string, number>()
 const eventRateLimiter = new FixedWindowRateLimiter()
@@ -917,7 +925,7 @@ function advanceToRoundResults(room: ReturnType<typeof getRoom>) {
     } else {
       showFinalResults(room)
     }
-  }, RESULTS_PAUSE * 1000)
+  }, RESULTS_PAUSE_MS)
 }
 
 function showFinalResults(room: ReturnType<typeof getRoom>) {
@@ -941,7 +949,31 @@ function showFinalResults(room: ReturnType<typeof getRoom>) {
   })
 }
 
-const PORT = process.env.PORT || 3001
-httpServer.listen(PORT, () => {
-  console.log(`Drawly server running on port ${PORT}`)
-})
+export function startServer(port: number | string = process.env.PORT || 3001): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const handleError = (error: Error) => {
+      httpServer.off('error', handleError)
+      reject(error)
+    }
+    httpServer.once('error', handleError)
+    httpServer.listen(port, () => {
+      httpServer.off('error', handleError)
+      const address = httpServer.address()
+      resolve(typeof address === 'object' && address ? address.port : Number(port))
+    })
+  })
+}
+
+export function stopServer(): Promise<void> {
+  clearAllRooms()
+  return new Promise(resolve => {
+    io.close(() => resolve())
+  })
+}
+
+const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
+if (isMainModule) {
+  void startServer().then(port => {
+    console.log(`Drawly server running on port ${port}`)
+  })
+}

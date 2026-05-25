@@ -5,18 +5,19 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "test": "tsx --test src/security.test.ts src/rooms.test.ts",
+    "test": "tsx --test src/security.test.ts src/rooms.test.ts src/server.integration.test.ts",
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "cors": "^2.8.5",
     "express": "^4.21.0",
-    "socket.io": "^4.8.0",
-    "cors": "^2.8.5"
+    "socket.io": "^4.8.0"
   },
   "devDependencies": {
-    "@types/express": "^5.0.0",
     "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
     "@types/node": "^22.0.0",
+    "socket.io-client": "^4.8.1",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   }

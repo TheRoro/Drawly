@@ -363,3 +363,15 @@ export function getSerializablePlayers(
     ...player
   }) => player)
 }
+
+export function clearAllRooms(): void {
+  for (const timer of disconnectTimers.values()) clearTimeout(timer)
+  disconnectTimers.clear()
+
+  for (const room of rooms.values()) {
+    if (room.roundTimer) clearTimeout(room.roundTimer)
+    const snapshotInterval: ReturnType<typeof setInterval> | undefined = (room as any)._snapshotInterval
+    if (snapshotInterval) clearInterval(snapshotInterval)
+  }
+  rooms.clear()
+}
