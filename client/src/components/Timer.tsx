@@ -26,14 +26,24 @@ export default function Timer({ timerEnd }: TimerProps) {
   if (seconds === null) return null
 
   const isUrgent = seconds <= 10
+  const shouldAnnounce = [10, 5, 3, 2, 1, 0].includes(seconds)
 
   return (
-    <div className={`fixed top-4 right-4 z-50 px-4 py-2 rounded-full font-bold text-xl shadow-lg transition-all ${
-      isUrgent
-        ? 'bg-red-500 text-white animate-pulse scale-110'
-        : 'bg-white/90 text-ink-200'
-    }`}>
-      ⏱️ {seconds}s
-    </div>
+    <>
+      <div
+        role="timer"
+        aria-label={`${seconds} seconds remaining`}
+        className={`fixed top-4 right-4 z-50 px-4 py-2 rounded-full font-bold text-xl shadow-lg transition-all ${
+          isUrgent
+            ? 'bg-red-500 text-white motion-safe:animate-pulse motion-safe:scale-110'
+            : 'bg-white/90 text-ink-200'
+        }`}
+      >
+        <span aria-hidden="true">⏱️ </span>{seconds}s
+      </div>
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {shouldAnnounce ? `${seconds} seconds remaining` : ''}
+      </span>
+    </>
   )
 }

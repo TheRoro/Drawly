@@ -95,18 +95,23 @@ export default function Reactions() {
       {/* Reaction bar fixed at bottom */}
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex gap-1 bg-white/90 backdrop-blur-sm rounded-full shadow-lg px-3 py-2 border border-paper-300">
         <button
+          type="button"
           onClick={() => setMuted(!muted)}
           className="text-lg hover:scale-110 active:scale-90 transition-transform touch-manipulation px-1 opacity-60"
           title={muted ? 'Unmute sounds' : 'Mute sounds'}
+          aria-label={muted ? 'Unmute reaction sounds' : 'Mute reaction sounds'}
+          aria-pressed={muted}
         >
           {muted ? '🔇' : '🔊'}
         </button>
         {REACTIONS.map(({ emoji, label }) => (
           <button
+            type="button"
             key={emoji}
             onClick={() => sendReaction(emoji)}
             className="text-2xl hover:scale-125 active:scale-90 transition-transform touch-manipulation p-1"
             title={label}
+            aria-label={`Send ${label} reaction`}
           >
             {emoji}
           </button>

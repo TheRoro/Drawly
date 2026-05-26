@@ -11,6 +11,21 @@ const COLORS = [
   '#92400e', '#365314',
 ]
 const SIZES = [2, 5, 10, 18]
+const COLOR_NAMES: Record<string, string> = {
+  '#1a1a1a': 'black',
+  '#6b7280': 'gray',
+  '#ffffff': 'white',
+  '#ef4444': 'red',
+  '#f97316': 'orange',
+  '#f59e0b': 'yellow',
+  '#22c55e': 'green',
+  '#3b82f6': 'blue',
+  '#8b5cf6': 'purple',
+  '#ec4899': 'pink',
+  '#06b6d4': 'cyan',
+  '#92400e': 'brown',
+  '#365314': 'olive',
+}
 
 export default function DrawPhase() {
   const { assignedPrompt, timerEnd, submitDrawing, drawingRound, totalRounds, hasSubmittedDrawing } = useGame()
@@ -215,8 +230,8 @@ export default function DrawPhase() {
   if (submitted) {
     return (
       <section className="w-screen h-screen bg-paper-pattern bg-no-repeat bg-cover flex flex-col items-center justify-center p-6">
-        <div className="card text-center animate-bounce-in">
-          <p className="text-4xl mb-4">🎨</p>
+        <div className="card text-center animate-bounce-in" role="status" aria-live="polite">
+          <p className="text-4xl mb-4" aria-hidden="true">🎨</p>
           <p className="text-xl font-medium text-ink-200">Drawing submitted!</p>
           <p className="text-ink-100 mt-2">Waiting for other artists...</p>
         </div>
@@ -240,6 +255,9 @@ export default function DrawPhase() {
           width={800}
           height={400}
           className={`rounded-xl w-full h-full touch-none select-none ${isEraser ? '' : 'cursor-crosshair'}`}
+          role="img"
+          aria-label={`Drawing canvas. Current prompt: ${assignedPrompt}`}
+          aria-describedby="drawing-accessibility-note"
           style={{ aspectRatio: '2/1', cursor: isEraser ? 'url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2720%27 height=%2720%27%3E%3Ccircle cx=%2710%27 cy=%2710%27 r=%279%27 fill=%27none%27 stroke=%27%23666%27 stroke-width=%271.5%27/%3E%3C/svg%3E") 10 10, auto' : undefined }}
           onMouseDown={startDraw}
           onMouseMove={draw}
@@ -248,35 +266,46 @@ export default function DrawPhase() {
           onTouchStart={startDraw}
           onTouchMove={draw}
           onTouchEnd={stopDraw}
-        />
+        >
+          Drawing canvas for the prompt: {assignedPrompt}
+        </canvas>
       </div>
+      <p id="drawing-accessibility-note" className="sr-only">
+        Canvas drawing currently requires pointer or touch input and is not keyboard accessible.
+      </p>
 
       {/* Toolbar — bigger touch targets on mobile */}
       <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 w-full max-w-[800px]">
-        <div className="grid grid-cols-7 gap-1.5 sm:gap-1">
+        <div className="grid grid-cols-7 gap-1.5 sm:gap-1" role="group" aria-label="Brush color">
           {COLORS.map(c => (
             <button
+              type="button"
               key={c}
               className={`w-9 h-9 sm:w-8 sm:h-8 rounded-full border-2 transition-transform touch-manipulation ${
                 color === c && !isEraser ? 'scale-125 border-ink-200' : 'border-paper-300'
               } ${c === '#ffffff' ? 'ring-1 ring-gray-200' : ''}`}
               style={{ backgroundColor: c }}
               onClick={() => { setColor(c); setIsEraser(false) }}
+              aria-label={`Use ${COLOR_NAMES[c]} brush`}
+              aria-pressed={color === c && !isEraser}
             />
           ))}
         </div>
 
-        <div className="flex gap-1.5 sm:gap-1 items-center">
+        <div className="flex gap-1.5 sm:gap-1 items-center" role="group" aria-label="Brush size">
           {SIZES.map(s => (
             <button
+              type="button"
               key={s}
               className={`w-10 h-10 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center transition-transform touch-manipulation ${
                 brushSize === s ? 'ring-2 ring-blue-400 scale-110 bg-paper-300' : 'bg-paper-200 hover:bg-paper-300'
               }`}
               onClick={() => setBrushSize(s)}
               title={`${s}px`}
+              aria-label={`Use ${s} pixel brush`}
+              aria-pressed={brushSize === s}
             >
-              <svg width="24" height="24" viewBox="0 0 24 24">
+              <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
                 <line
                   x1="4" y1="12" x2="20" y2="12"
                   stroke={color}
@@ -289,35 +318,41 @@ export default function DrawPhase() {
         </div>
 
         <button
+          type="button"
           className={`btn text-sm px-4 py-2 ${isEraser ? 'ring-2 ring-blue-400 bg-blue-100 text-blue-700' : 'bg-paper-200 text-ink-100 hover:bg-paper-300'}`}
           onClick={() => setIsEraser(!isEraser)}
+          aria-pressed={isEraser}
         >
           🧽 Eraser
         </button>
 
         <button
+          type="button"
           className="btn text-sm px-3 py-2 bg-paper-200 text-ink-100 hover:bg-paper-300 disabled:opacity-30 disabled:cursor-not-allowed"
           onClick={undo}
           disabled={!canUndo}
           title="Undo (Ctrl+Z)"
+          aria-label="Undo last stroke"
         >
           ↩️
         </button>
 
         <button
+          type="button"
           className="btn text-sm px-3 py-2 bg-paper-200 text-ink-100 hover:bg-paper-300 disabled:opacity-30 disabled:cursor-not-allowed"
           onClick={redo}
           disabled={!canRedo}
           title="Redo (Ctrl+Y)"
+          aria-label="Redo last stroke"
         >
           ↪️
         </button>
 
-        <button className="btn text-sm bg-red-100 text-red-600 active:bg-red-200 px-4 py-2" onClick={clearCanvas}>
+        <button type="button" className="btn text-sm bg-red-100 text-red-600 active:bg-red-200 px-4 py-2" onClick={clearCanvas}>
           🗑️ Clear
         </button>
 
-        <button className="btn-green text-sm px-4 py-2" onClick={handleSubmit}>
+        <button type="button" className="btn-green text-sm px-4 py-2" onClick={handleSubmit}>
           ✅ Done
         </button>
       </div>

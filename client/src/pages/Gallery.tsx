@@ -41,9 +41,10 @@ export default function Gallery() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 max-w-6xl mx-auto">
         {drawings.map((drawing, i) => (
-          <div
+          <button
+            type="button"
             key={i}
-            className={`card transition-all duration-200 animate-slide-up touch-manipulation ${
+            className={`card w-full text-left transition-all duration-200 animate-slide-up touch-manipulation ${
               isOwnDrawing(i)
                 ? 'opacity-50 cursor-not-allowed ring-2 ring-gray-300'
                 : voted === i
@@ -54,23 +55,30 @@ export default function Gallery() {
             }`}
             style={{ animationDelay: `${i * 100}ms` }}
             onClick={() => voted === null && !isOwnDrawing(i) && handleVote(i)}
+            aria-disabled={isOwnDrawing(i) || voted !== null}
+            aria-label={
+              isOwnDrawing(i)
+                ? `Drawing option ${i + 1}, your drawing, voting disabled`
+                : `Vote for drawing option ${i + 1}`
+            }
+            aria-pressed={voted === i}
           >
             <img
               src={drawing.imageData}
-              alt="Drawing"
+              alt=""
               className="w-full rounded-xl border border-paper-300"
             />
             {isOwnDrawing(i) && (
-              <p className="text-center mt-3 text-gray-400 text-sm font-medium">
+              <span className="block text-center mt-3 text-gray-400 text-sm font-medium">
                 🚫 Your drawing
-              </p>
+              </span>
             )}
             {voted === i && (
-              <p className="text-center mt-3 text-emerald-600 font-bold animate-bounce-in">
+              <span className="block text-center mt-3 text-emerald-600 font-bold animate-bounce-in" role="status">
                 ✅ Your vote!
-              </p>
+              </span>
             )}
-          </div>
+          </button>
         ))}
       </div>
 
