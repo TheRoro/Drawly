@@ -275,7 +275,7 @@ export function reconnectPlayer(
     })
   })
 
-  const lastSnapshots: Map<string, string> | undefined = (room as any)._lastSnapshots
+  const lastSnapshots = room.lastSnapshots
   if (lastSnapshots?.has(oldSocketId)) {
     const snapshot = lastSnapshots.get(oldSocketId)
     lastSnapshots.delete(oldSocketId)
@@ -370,8 +370,7 @@ export function clearAllRooms(): void {
 
   for (const room of rooms.values()) {
     if (room.roundTimer) clearTimeout(room.roundTimer)
-    const snapshotInterval: ReturnType<typeof setInterval> | undefined = (room as any)._snapshotInterval
-    if (snapshotInterval) clearInterval(snapshotInterval)
+    if (room.snapshotInterval) clearInterval(room.snapshotInterval)
   }
   rooms.clear()
 }

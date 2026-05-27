@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
+import type { ReactionEmoji } from '@drawly/protocol'
 import { useGame } from '../context/GameContext'
 
-const REACTIONS = [
+const REACTIONS: { emoji: ReactionEmoji; sound: string; label: string }[] = [
   { emoji: '💥', sound: '/sounds/vine-boom.mp3', label: 'Boom' },
   { emoji: '👁️', sound: '/sounds/sus.mp3', label: 'Sus' },
   { emoji: '🗿', sound: '/sounds/bruh.mp3', label: 'Bruh' },

@@ -3,6 +3,12 @@ import { createServer } from 'http'
 import { pathToFileURL } from 'node:url'
 import { Server } from 'socket.io'
 import cors from 'cors'
+import type {
+  ClientToServerEvents,
+  InterServerEvents,
+  ServerToClientEvents,
+  SocketData,
+} from '@drawly/protocol'
 import {
   createRoom,
   canCreateRoom,
@@ -15,8 +21,6 @@ import {
   getCurrentPrompt,
   getDrawersForRound,
   haveAllDrawersSubmitted,
-  calculateRoundResults,
-  hasMoreRounds,
   resetForNewGame,
   getSerializablePlayers,
   clearAllRooms,
@@ -41,6 +45,7 @@ import {
   parseSocketId,
   type RateLimit,
 } from './security.js'
+import { createGameController } from './game.js'
 
 export const app = express()
 const allowedOrigins = [
@@ -68,7 +73,12 @@ app.use(cors(corsOptions))
 app.use(express.json())
 
 export const httpServer = createServer(app)
-export const io = new Server(httpServer, {
+export const io = new Server<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  InterServerEvents,
+  SocketData
+>(httpServer, {
   cors: {
     origin: allowedOrigins,
     methods: ['GET', 'POST'],
@@ -128,7 +138,7 @@ const EVENT_RATE_LIMITS: Record<string, { socket: RateLimit; address: RateLimit 
     address: { limit: 30, windowMs: 60_000 },
   },
 }
-const INBOUND_EVENTS = new Set([
+const INBOUND_EVENTS = new Set<string>([
   'time-sync',
   'create-room',
   'join-room',
@@ -142,7 +152,12 @@ const INBOUND_EVENTS = new Set([
   'submit-vote',
   'play-again',
   'kick-player',
-])
+] satisfies (keyof ClientToServerEvents)[])
+const {
+  startDrawingRound,
+  advanceToVoting,
+  advanceToRoundResults,
+} = createGameController(io, RESULTS_PAUSE_MS)
 
 function getClientAddress(headers: Record<string, string | string[] | undefined>, fallback: string): string {
   if (process.env.TRUST_PROXY !== 'true') return fallback
@@ -154,7 +169,7 @@ function getClientAddress(headers: Record<string, string | string[] | undefined>
 
 function getRoomDrawingBytes(room: NonNullable<ReturnType<typeof getRoom>>): number {
   const drawingBytes = room.drawings.reduce((total, drawing) => total + getImageBytes(drawing.imageData), 0)
-  const snapshots: Map<string, string> | undefined = (room as any)._lastSnapshots
+  const snapshots = room.lastSnapshots
   const snapshotBytes = snapshots
     ? [...snapshots.values()].reduce((total, imageData) => total + getImageBytes(imageData), 0)
     : 0
@@ -300,7 +315,7 @@ io.on('connection', (socket) => {
         // Build spy drawings for prompt author
         let spyData: { playerId: string; playerNickname: string; imageData: string; submitted: boolean }[] = []
         if (amAuthor) {
-          const lastSnapshots: Map<string, string> = (reconnectedRoom as any)._lastSnapshots || new Map()
+          const lastSnapshots = reconnectedRoom.lastSnapshots || new Map<string, string>()
           const submittedIds = new Set(reconnectedRoom.currentRoundDrawings.map(d => d.playerId))
           const drawers = getDrawersForRound(reconnectedRoom)
           for (const playerId of drawers) {
@@ -506,7 +521,7 @@ io.on('connection', (socket) => {
     const player = room.players.get(socket.id)
 
     // Store last snapshot for auto-submit on timeout
-    const lastSnapshots: Map<string, string> = (room as any)._lastSnapshots || new Map()
+    const lastSnapshots = room.lastSnapshots || new Map<string, string>()
     const previousSnapshot = lastSnapshots.get(socket.id)
     const projectedBytes =
       getRoomDrawingBytes(room) -
@@ -517,7 +532,7 @@ io.on('connection', (socket) => {
       return
     }
     lastSnapshots.set(socket.id, imageData)
-    ;(room as any)._lastSnapshots = lastSnapshots
+    room.lastSnapshots = lastSnapshots
 
     // Forward snapshot to prompt author (spy mode)
     io.to(room.currentPromptAuthorId).emit('spy-snapshot', {
@@ -746,208 +761,6 @@ io.on('connection', (socket) => {
     }
   })
 })
-
-function startDrawingRound(room: ReturnType<typeof getRoom>) {
-  if (!room) return
-  console.log(`[${room.code}] Starting drawing round ${room.currentRound + 1}/${room.totalRounds}, players: ${room.players.size}`)
-
-  // Fill in default prompts for players who didn't submit
-  for (const [id] of room.players) {
-    if (!room.prompts.has(id)) {
-      const defaults = ['A happy cat', 'A rocket ship', 'Pizza party', 'Dancing robot', 'Sunny beach']
-      room.prompts.set(id, defaults[Math.floor(Math.random() * defaults.length)])
-    }
-  }
-
-  // Set up this round
-  room.currentRoundDrawings = []
-  ;(room as any)._lastSnapshots = new Map<string, string>() // Store last snapshot per player
-  const { prompt, authorId } = getCurrentPrompt(room)
-  room.currentPromptAuthorId = authorId
-  const authorNickname = room.players.get(authorId)?.nickname || 'Someone'
-
-  room.phase = 'drawing'
-  room.timerEnd = Date.now() + room.drawTime * 1000
-
-  // Tell drawers to draw
-  const drawers = getDrawersForRound(room)
-  for (const playerId of drawers) {
-    io.to(playerId).emit('assign-prompt', { prompt })
-  }
-
-  // Tell the author they're waiting
-  io.to(authorId).emit('waiting-round', {
-    message: `Others are drawing your prompt: "${prompt}"`,
-  })
-
-  io.to(room.code).emit('game-phase', {
-    phase: 'drawing',
-    timerEnd: room.timerEnd,
-    currentRound: room.currentRound + 1,
-    totalRounds: room.totalRounds,
-    promptAuthorId: authorId,
-    promptAuthorNickname: authorNickname,
-  })
-
-  room.roundTimer = setTimeout(() => {
-    // Re-compute drawers at timer expiry (socket IDs may have changed due to reconnections)
-    const currentDrawers = getDrawersForRound(room)
-    const submittedIds = new Set(room.currentRoundDrawings.map(d => d.playerId))
-    const lastSnapshots: Map<string, string> = (room as any)._lastSnapshots || new Map()
-    const { prompt: roundPrompt } = getCurrentPrompt(room)
-
-    for (const playerId of currentDrawers) {
-      if (!submittedIds.has(playerId) && lastSnapshots.has(playerId)) {
-        const player = room.players.get(playerId)
-        const drawing: import('./types.js').Drawing = {
-          playerId,
-          playerNickname: player?.nickname || 'Anonymous',
-          prompt: roundPrompt,
-          promptAuthorId: room.currentPromptAuthorId,
-          imageData: lastSnapshots.get(playerId)!,
-          votes: [],
-          round: room.currentRound,
-        }
-        room.currentRoundDrawings.push(drawing)
-        room.drawings.push(drawing)
-        console.log(`[${room.code}] Auto-submitted drawing for ${player?.nickname || playerId}`)
-      }
-    }
-
-    advanceToVoting(room)
-  }, room.drawTime * 1000)
-
-  // Request periodic snapshots for spy mode (every 2 seconds)
-  // Re-compute drawers each tick so reconnected players get snapshot requests
-  const snapshotInterval = setInterval(() => {
-    if (room.phase !== 'drawing') {
-      clearInterval(snapshotInterval)
-      return
-    }
-    const currentDrawers = getDrawersForRound(room)
-    for (const playerId of currentDrawers) {
-      io.to(playerId).emit('request-snapshot')
-    }
-  }, 2000)
-
-  // Store interval to clear later
-  ;(room as any)._snapshotInterval = snapshotInterval
-}
-
-function advanceToVoting(room: ReturnType<typeof getRoom>) {
-  if (!room) return
-  
-  console.log(`[${room.code}] advanceToVoting: ${room.currentRoundDrawings.length} drawings`)
-
-  // Clear snapshot interval
-  if ((room as any)._snapshotInterval) {
-    clearInterval((room as any)._snapshotInterval)
-    ;(room as any)._snapshotInterval = null
-  }
-
-  // If no drawings submitted, skip voting and go to next round
-  if (room.currentRoundDrawings.length === 0) {
-    console.log(`[${room.code}] No drawings, skipping to next round`)
-    room.phase = 'round-results'
-    room.roundTimer = setTimeout(() => {
-      if (hasMoreRounds(room)) {
-        room.currentRound++
-        startDrawingRound(room)
-      } else {
-        showFinalResults(room)
-      }
-    }, 3000)
-    return
-  }
-
-  // If only 1 drawing, skip voting (auto-win)
-  if (room.currentRoundDrawings.length === 1) {
-    console.log(`[${room.code}] Only 1 drawing, auto-win → round results`)
-    room.currentRoundDrawings[0].votes.push('auto-win')
-    advanceToRoundResults(room)
-    return
-  }
-
-  room.phase = 'voting'
-  room.timerEnd = Date.now() + VOTE_TIME * 1000
-
-  const { prompt } = getCurrentPrompt(room)
-
-  io.to(room.code).emit('game-phase', {
-    phase: 'voting',
-    currentRound: room.currentRound + 1,
-    totalRounds: room.totalRounds,
-    timerEnd: room.timerEnd,
-  })
-
-  io.to(room.code).emit('drawings', {
-    prompt,
-    drawings: room.currentRoundDrawings.map((d, i) => ({
-      index: i,
-      prompt: d.prompt,
-      imageData: d.imageData,
-      playerId: d.playerId, // for self-vote prevention
-      // playerNickname hidden until results
-    })),
-  })
-
-  room.roundTimer = setTimeout(() => {
-    advanceToRoundResults(room)
-  }, VOTE_TIME * 1000)
-}
-
-function advanceToRoundResults(room: ReturnType<typeof getRoom>) {
-  if (!room) return
-  console.log(`[${room.code}] Round ${room.currentRound + 1} results — ${room.currentRoundDrawings.length} drawings`)
-
-  room.phase = 'round-results'
-  const results = calculateRoundResults(room)
-
-  io.to(room.code).emit('round-results', {
-    currentRound: room.currentRound + 1,
-    totalRounds: room.totalRounds,
-    drawings: results.map(d => ({
-      playerNickname: d.playerNickname,
-      prompt: d.prompt,
-      imageData: d.imageData,
-      votes: d.votes.length,
-    })),
-    leaderboard: getSerializablePlayers(room)
-      .sort((a, b) => b.score - a.score)
-      .map(p => ({ nickname: p.nickname, avatar: p.avatar, score: p.score, isHost: p.isHost, color: p.color })),
-  })
-
-  // After pause, go to next round or final results
-  room.roundTimer = setTimeout(() => {
-    if (hasMoreRounds(room)) {
-      room.currentRound++
-      startDrawingRound(room)
-    } else {
-      showFinalResults(room)
-    }
-  }, RESULTS_PAUSE_MS)
-}
-
-function showFinalResults(room: ReturnType<typeof getRoom>) {
-  if (!room) return
-  room.phase = 'results'
-
-  io.to(room.code).emit('game-phase', { phase: 'results' })
-  io.to(room.code).emit('results', {
-    drawings: room.drawings
-      .sort((a, b) => b.votes.length - a.votes.length)
-      .slice(0, 6)
-      .map(d => ({
-        playerNickname: d.playerNickname,
-        prompt: d.prompt,
-        imageData: d.imageData,
-        votes: d.votes.length,
-      })),
-    leaderboard: getSerializablePlayers(room)
-      .sort((a, b) => b.score - a.score)
-      .map(p => ({ nickname: p.nickname, avatar: p.avatar, score: p.score, isHost: p.isHost, color: p.color })),
-  })
-}
 
 export function startServer(port: number | string = process.env.PORT || 3001): Promise<number> {
   return new Promise((resolve, reject) => {

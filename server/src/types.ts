@@ -37,4 +37,6 @@ export interface Room {
   playerOrder: string[] // fixed order — determines whose prompt is used each round
   currentPromptAuthorId: string // whose prompt is being drawn this round
   drawTime: number // seconds per drawing round
+  lastSnapshots?: Map<string, string>
+  snapshotInterval?: ReturnType<typeof setInterval> | null
 }

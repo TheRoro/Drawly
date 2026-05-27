@@ -37,10 +37,12 @@ cd client && npm run dev
 
 ## Deployment
 
-- **Frontend**: Deploy `client/` to Vercel (build command: `npm run build`, output: `dist`)
-- **Server**: Deploy `server/` to Render as Web Service
-  - Build command: `npm install && npm run build`
-  - Start command: `npm start`
+- **Frontend**: Deploy from the repository root to Vercel
+  - Build command: `npm install --prefix client && npm run build:client`
+  - Output directory: `client/dist`
+- **Server**: Deploy from the repository root to Render as Web Service
+  - Build command: `npm install --prefix server && npm run build:server`
+  - Start command: `npm run start --prefix server`
   - Set `CLIENT_URL` env var to your Vercel domain
   - Set `TRUST_PROXY=true` only when Render or another trusted reverse proxy
     overwrites `X-Forwarded-For`; leave it unset for direct deployments

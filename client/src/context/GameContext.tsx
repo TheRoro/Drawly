@@ -1,68 +1,29 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
+import type {
+  ChatMessage,
+  DrawingEntry,
+  GamePhase,
+  LeaderboardEntry,
+  PlayerView as Player,
+  Reaction,
+  ReactionEmoji,
+  ResultEntry,
+  RoomState,
+  ServerToClientEvents,
+  SpyDrawing,
+} from '@drawly/protocol'
 import { socket, toLocalTime } from '../socket'
 
-export interface Player {
-  id: string
-  nickname: string
-  avatar: string
-  isHost: boolean
-  score: number
-  connected: boolean
-  color: string
-}
-
-export interface RoomState {
-  players: Player[]
-  phase: string
-  code: string
-}
-
-export interface DrawingEntry {
-  index: number
-  prompt: string
-  imageData: string
-  playerId?: string
-  playerNickname?: string
-}
-
-export interface ResultEntry {
-  playerNickname: string
-  prompt: string
-  imageData: string
-  votes: number
-}
-
-export interface LeaderboardEntry {
-  nickname: string
-  avatar: string
-  score: number
-  isHost: boolean
-  color: string
-}
-
-export interface SpyDrawing {
-  imageData: string
-  playerNickname: string
-  count: number
-  total: number
-}
-
-export interface ChatMessage {
-  id: string
-  playerId: string
-  nickname: string
-  avatar: string
-  color: string
-  message: string
-  timestamp: number
-}
-
-export interface Reaction {
-  id: string
-  playerId: string
-  nickname: string
-  emoji: string
+export type {
+  ChatMessage,
+  DrawingEntry,
+  LeaderboardEntry,
+  Player,
+  Reaction,
+  ResultEntry,
+  RoomState,
+  SpyDrawing,
 }
 
 interface GameContextType {
@@ -83,7 +44,7 @@ interface GameContextType {
   chatMessages: ChatMessage[]
   reactions: Reaction[]
   sendChatMessage: (message: string) => void
-  sendReaction: (emoji: string) => void
+  sendReaction: (emoji: ReactionEmoji) => void
   kickPlayer: (targetId: string) => void
   createRoom: (nickname: string, avatar: string) => void
   joinRoom: (code: string, nickname: string, avatar: string) => void
@@ -120,11 +81,24 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const reconnectTokenRef = useRef<string>(sessionStorage.getItem('drawly-reconnect-token') || '')
 
   useEffect(() => {
-    type SocketListener = (...args: any[]) => void
-    const listeners: { event: string; listener: SocketListener }[] = []
-    const on = (event: string, listener: SocketListener) => {
-      socket.on(event, listener)
-      listeners.push({ event, listener })
+    interface ServerEventSubscriber {
+      on<Event extends keyof ServerToClientEvents>(
+        event: Event,
+        listener: ServerToClientEvents[Event],
+      ): void
+      off<Event extends keyof ServerToClientEvents>(
+        event: Event,
+        listener: ServerToClientEvents[Event],
+      ): void
+    }
+    const serverEvents = socket as unknown as ServerEventSubscriber
+    const removeListeners: (() => void)[] = []
+    const on = <Event extends keyof ServerToClientEvents>(
+      event: Event,
+      listener: ServerToClientEvents[Event],
+    ) => {
+      serverEvents.on(event, listener)
+      removeListeners.push(() => serverEvents.off(event, listener))
     }
 
     if (!socket.connected) {
@@ -140,8 +114,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
       if (code && nickname && reconnectToken) {
         socket.emit('rejoin-room', {
           code,
-          nickname,
-          avatar: avatarRef.current,
           reconnectToken,
         })
       } else if (code || nickname || reconnectToken) {
@@ -157,26 +129,31 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    on('connect', handleConnect)
+    socket.on('connect', handleConnect)
+    removeListeners.push(() => socket.off('connect', handleConnect))
 
     // If socket already connected (e.g. StrictMode remount), rejoin immediately
     if (socket.connected) {
       handleConnect()
     }
 
-    on('disconnect', (reason) => {
+    const handleDisconnect = (reason: string) => {
       if (reason === 'io server disconnect') {
         setError('Disconnected by server')
       } else {
         setError('Connection lost — reconnecting...')
       }
-    })
+    }
+    socket.on('disconnect', handleDisconnect)
+    removeListeners.push(() => socket.off('disconnect', handleDisconnect))
 
-    on('connect_error', (err: Error & { description?: unknown }) => {
+    const handleConnectError = (err: Error & { description?: unknown }) => {
       const detail = typeof err.message === 'string' && err.message ? err.message : 'Unknown connection error'
       setError(`Can't connect to the game server (${detail}). Try mobile data or a different network.`)
       setTimeout(() => setError(null), 5000)
-    })
+    }
+    socket.on('connect_error', handleConnectError)
+    removeListeners.push(() => socket.off('connect_error', handleConnectError))
 
     on('room-created', ({ code }: { code: string }) => {
       roomCodeRef.current = code
@@ -195,7 +172,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setRoom(data)
     })
 
-    on('game-phase', ({ phase, timerEnd: te, currentRound: cr, totalRounds: tr, promptAuthorId }: { phase: string; timerEnd?: number; currentRound?: number; totalRounds?: number; promptAuthorId?: string }) => {
+    on('game-phase', ({ phase, timerEnd: te, currentRound: cr, totalRounds: tr, promptAuthorId }: { phase: GamePhase; timerEnd?: number | null; currentRound?: number; totalRounds?: number; promptAuthorId?: string }) => {
       setRoom(prev => prev ? { ...prev, phase } : null)
       setTimerEnd(te ? toLocalTime(te) : null)
       if (cr !== undefined) setDrawingRound(cr)
@@ -232,11 +209,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     // Complete state restore for drawing phase rejoin
     on('drawing-state', (data: {
-      phase: string
+      phase: 'drawing'
       role: 'drawer' | 'prompt-author'
       prompt: string
       hasSubmitted: boolean
-      timerEnd: number
+      timerEnd: number | null
       currentRound: number
       totalRounds: number
       promptAuthorId: string
@@ -359,9 +336,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     })
 
     return () => {
-      listeners.forEach(({ event, listener }) => {
-        socket.off(event, listener)
-      })
+      removeListeners.forEach(removeListener => removeListener())
     }
   }, [navigate])
 
@@ -413,7 +388,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     socket.emit('chat-message', { message })
   }, [])
 
-  const sendReaction = useCallback((emoji: string) => {
+  const sendReaction = useCallback((emoji: ReactionEmoji) => {
     socket.emit('reaction', { emoji })
   }, [])
 

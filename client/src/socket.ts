@@ -1,8 +1,9 @@
 import { io, Socket } from 'socket.io-client'
+import type { ClientToServerEvents, ServerToClientEvents } from '@drawly/protocol'
 
 const URL = import.meta.env.VITE_SERVER_URL || ''
 
-export const socket: Socket = io(URL, {
+export const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(URL, {
   autoConnect: false,
   reconnection: true,
   reconnectionAttempts: 10,

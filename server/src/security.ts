@@ -5,7 +5,7 @@ export const ALLOWED_AVATARS = new Set([
   '🐱', '🐶', '🦊', '🐸', '🐼', '🐨', '🦄', '🐙', '🐥', '🦋', '🐢', '🦈',
   '🤖', '👻', '🎃', '👽', '🧠', '🔥', '⭐', '🍕', '🎮', '🌈', '💎', '🍄',
 ])
-export const ALLOWED_REACTIONS = new Set(['💥', '👁️', '🗿', '🫠', '💀', '🎺'])
+export const ALLOWED_REACTIONS = new Set<ReactionEmoji>(['💥', '👁️', '🗿', '🫠', '💀', '🎺'])
 
 export const MAX_DRAWING_BYTES = 1_000_000
 export const MAX_SNAPSHOT_BYTES = 500_000
@@ -97,8 +97,10 @@ export function parseChatMessage(value: unknown): string | null {
   return message
 }
 
-export function parseReaction(value: unknown): string | null {
-  return typeof value === 'string' && ALLOWED_REACTIONS.has(value) ? value : null
+export function parseReaction(value: unknown): ReactionEmoji | null {
+  return typeof value === 'string' && ALLOWED_REACTIONS.has(value as ReactionEmoji)
+    ? value as ReactionEmoji
+    : null
 }
 
 export function parseDrawTime(value: unknown): number | null {
@@ -144,3 +146,4 @@ export function getImageBytes(imageData: string): number {
   const padding = encoded.endsWith('==') ? 2 : encoded.endsWith('=') ? 1 : 0
   return Math.floor(encoded.length * 3 / 4) - padding
 }
+import type { ReactionEmoji } from '@drawly/protocol'
