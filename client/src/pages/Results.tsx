@@ -3,6 +3,7 @@ import { useGame } from '../context/GameContext'
 import { socket } from '../socket'
 import confetti from 'canvas-confetti'
 import Reactions from '../components/Reactions'
+import { createRecapImage } from '../utils/createRecapImage'
 
 const MEDALS = ['🥇', '🥈', '🥉']
 const PODIUM_HEIGHTS = ['h-40', 'h-28', 'h-20']
@@ -35,6 +36,8 @@ export default function Results() {
   const { results, leaderboard, playAgain, room } = useGame()
   const isHost = room?.players.find(p => p.id === socket.id)?.isHost
   const confettiFired = useRef(false)
+  const [recapStatus, setRecapStatus] = useState('')
+  const [isCreatingRecap, setIsCreatingRecap] = useState(false)
 
   // Fire confetti for the winner
   useEffect(() => {
@@ -68,6 +71,45 @@ export default function Results() {
     link.click()
     document.body.removeChild(link)
   }, [])
+
+  const createRecap = useCallback(async (share: boolean) => {
+    if (isCreatingRecap) return
+    setIsCreatingRecap(true)
+    setRecapStatus('')
+
+    try {
+      const blob = await createRecapImage(leaderboard, results)
+      const file = new File([blob], 'drawly-game-recap.png', { type: 'image/png' })
+
+      if (share && navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({
+          title: 'Our Drawly game',
+          text: 'Check out the results from our Drawly game!',
+          files: [file],
+        })
+        setRecapStatus('Recap shared.')
+        return
+      }
+
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = file.name
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      setRecapStatus(share ? 'Sharing is unavailable here, so the recap was downloaded.' : 'Recap downloaded.')
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        setRecapStatus('Sharing canceled.')
+      } else {
+        setRecapStatus(error instanceof Error ? error.message : 'The recap could not be created.')
+      }
+    } finally {
+      setIsCreatingRecap(false)
+    }
+  }, [isCreatingRecap, leaderboard, results])
 
   return (
     <section className="w-screen min-h-screen bg-paper-pattern bg-no-repeat bg-cover p-6 pb-20">
@@ -162,6 +204,39 @@ export default function Results() {
               )
             })}
           </div>
+        </div>
+      )}
+
+      {leaderboard.length > 0 && (
+        <div className="card max-w-xl mx-auto mb-10 text-center">
+          <h3 className="font-shadows text-3xl text-ink-200">Share the chaos</h3>
+          <p className="text-ink-100 mt-2 mb-4">
+            Create a branded recap with the leaderboard and top drawings. It is generated entirely in your browser.
+          </p>
+          <div className="flex flex-wrap justify-center gap-3">
+            <button
+              type="button"
+              className="btn-blue text-base"
+              onClick={() => void createRecap(true)}
+              disabled={isCreatingRecap}
+            >
+              📤 Share Recap
+            </button>
+            <button
+              type="button"
+              className="btn text-base bg-paper-200 text-ink-200 hover:bg-paper-300 disabled:opacity-60"
+              onClick={() => void createRecap(false)}
+              disabled={isCreatingRecap}
+            >
+              💾 Save Recap
+            </button>
+          </div>
+          <p className="sr-only" role="status" aria-live="polite">
+            {isCreatingRecap ? 'Creating recap.' : recapStatus}
+          </p>
+          {recapStatus && (
+            <p className="text-sm text-ink-100 mt-3" aria-hidden="true">{recapStatus}</p>
+          )}
         </div>
       )}
 
