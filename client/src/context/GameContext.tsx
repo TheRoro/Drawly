@@ -111,12 +111,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const nickname = nicknameRef.current
       const reconnectToken = reconnectTokenRef.current
       console.log('[Drawly] Socket connected, rejoin check:', { code, nickname, socketId: socket.id })
-      if (code && nickname && reconnectToken) {
+      if (code && reconnectToken) {
         socket.emit('rejoin-room', {
           code,
           reconnectToken,
         })
-      } else if (code || nickname || reconnectToken) {
+      } else if (code || reconnectToken) {
         roomCodeRef.current = ''
         nicknameRef.current = ''
         avatarRef.current = ''
