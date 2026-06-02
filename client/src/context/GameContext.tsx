@@ -59,6 +59,8 @@ const GameContext = createContext<GameContextType | null>(null)
 
 export function GameProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
+  const navigateRef = useRef(navigate)
+  navigateRef.current = navigate
   const [room, setRoom] = useState<RoomState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [assignedPrompt, setAssignedPrompt] = useState<string>('')
@@ -79,6 +81,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const avatarRef = useRef<string>(sessionStorage.getItem('drawly-avatar') || '')
   const roomCodeRef = useRef<string>(sessionStorage.getItem('drawly-room') || '')
   const reconnectTokenRef = useRef<string>(sessionStorage.getItem('drawly-reconnect-token') || '')
+  const reconnectAttemptSocketIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     interface ServerEventSubscriber {
@@ -112,6 +115,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const reconnectToken = reconnectTokenRef.current
       console.log('[Drawly] Socket connected, rejoin check:', { code, nickname, socketId: socket.id })
       if (code && reconnectToken) {
+        if (reconnectAttemptSocketIdRef.current === socket.id) return
+        reconnectAttemptSocketIdRef.current = socket.id || null
         socket.emit('rejoin-room', {
           code,
           reconnectToken,
@@ -125,7 +130,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         sessionStorage.removeItem('drawly-nickname')
         sessionStorage.removeItem('drawly-avatar')
         sessionStorage.removeItem('drawly-reconnect-token')
-        navigate('/')
+        navigateRef.current('/')
       }
     }
 
@@ -187,19 +192,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
           setRoundResults(null)
           setIsPromptAuthor(false)
           setWaitingMessage('')
-          navigate('/prompt')
+          navigateRef.current('/prompt')
           break
         case 'drawing':
           setRoundResults(null)
           setHasSubmittedDrawing(false)
           if (amAuthor) {
-            navigate('/waiting')
+            navigateRef.current('/waiting')
           } else {
-            navigate('/draw')
+            navigateRef.current('/draw')
           }
           break
         case 'voting':
-          navigate('/gallery')
+          navigateRef.current('/gallery')
           break
         case 'results':
           // Navigation happens in 'results' event handler when data arrives
@@ -235,11 +240,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
           count: 0,
           total: 0,
         })) as any)
-        navigate('/waiting')
+        navigateRef.current('/waiting')
       } else {
         setIsPromptAuthor(false)
         setAssignedPrompt(data.prompt)
-        navigate('/draw')
+        navigateRef.current('/draw')
       }
     })
 
@@ -290,13 +295,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setRoundResults({ drawings: d, leaderboard: l })
       setDrawingRound(cr)
       setTotalRounds(tr)
-      navigate('/round-results')
+      navigateRef.current('/round-results')
     })
 
     on('results', ({ drawings: d, leaderboard: l }: { drawings: ResultEntry[]; leaderboard: LeaderboardEntry[] }) => {
       setResults(d)
       setLeaderboard(l)
-      navigate('/results')
+      navigateRef.current('/results')
     })
 
     on('error', ({ message }: { message: string }) => {
@@ -314,12 +319,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     on('room-expired', () => {
       setRoom(null)
+      roomCodeRef.current = ''
+      nicknameRef.current = ''
+      avatarRef.current = ''
+      reconnectTokenRef.current = ''
+      reconnectAttemptSocketIdRef.current = null
       sessionStorage.removeItem('drawly-room')
       sessionStorage.removeItem('drawly-nickname')
       sessionStorage.removeItem('drawly-avatar')
       sessionStorage.removeItem('drawly-reconnect-token')
-      reconnectTokenRef.current = ''
-      navigate('/')
+      navigateRef.current('/')
     })
 
     on('kicked', () => {
@@ -332,13 +341,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setRoom(null)
       setError('You were removed from the room by the host.')
       setTimeout(() => setError(null), 4000)
-      navigate('/')
+      navigateRef.current('/')
     })
 
     return () => {
       removeListeners.forEach(removeListener => removeListener())
     }
-  }, [navigate])
+  }, [])
 
   const createRoom = useCallback((nickname: string, avatar: string) => {
     nicknameRef.current = nickname
